@@ -1,0 +1,15 @@
+[Unit]
+Description=File Manager Flask App
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/file-manager
+ExecStart=/home/ubuntu/file-manager/venv/bin/python /home/ubuntu/file-manager/app.py
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

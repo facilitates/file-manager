@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+venv/
+uploads/*
+!uploads/.gitkeep
+.sync_db.json
+*.log

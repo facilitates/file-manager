@@ -1,0 +1,15 @@
+[Unit]
+Description=File Manager Auto Sync (WeChat → File Manager)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/file-manager
+ExecStart=/home/ubuntu/file-manager/venv/bin/python /home/ubuntu/file-manager/sync.py
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

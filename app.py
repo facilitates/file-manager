@@ -1,6 +1,9 @@
 import os
 import uuid
+import base64
 import mimetypes
+import subprocess
+import requests
 from datetime import datetime
 from pathlib import Path
 
@@ -10,10 +13,21 @@ app = Flask(__name__)
 
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
-MAX_SIZE = 200 * 1024 * 1024  # 200MB
+MAX_SIZE = 200 * 1024 * 1024
+
+# 豆包 API 配置
+DOUBAO_KEY = "ark-6e3d9b8f-4b25-4b4a-8b40-6c0e7f386bb5-31b66"
+DOUBAO_BASE = "https://ark.cn-beijing.volces.com/api/v3"
+DOUBAO_MODEL = "ep-20260518223807-r9sqp"
+
+CLASSIFY_PROMPT = """用1-2个中文字给这张图一个分类名，从以下选：
+猫, 狗, 动物, 风景, 美食, 人物, 截图, 表情包, 动漫, 
+文档, 代码, 设计, 自拍, 萌宠, 植物, 建筑, 车
+
+如果都不匹配，给一个2字内的分类名。
+只回复1-2个字，不要标点不要解释。"""
 
 def safe_filename(name):
-    """保留原始名但去危险字符"""
     return name.replace("..", "").replace("/", "_").replace("\\", "_")
 
 def get_folders():
@@ -37,23 +51,81 @@ def get_files(folder=""):
             is_video = bool(mime and mime.startswith("video/"))
             rel = f"{folder}/{f.name}" if folder else f.name
             files.append({
-                "name": f.name,
-                "folder": folder,
+                "name": f.name, "folder": folder,
                 "size": stat.st_size,
                 "mtime": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                 "type": mime or "unknown",
-                "is_image": is_image,
-                "is_video": is_video,
+                "is_image": is_image, "is_video": is_video,
                 "url": f"/uploads/{rel}"
             })
     return files
+
+def ai_classify_image(image_path):
+    """用豆包视觉 API 对图片分类"""
+    try:
+        with open(image_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        
+        resp = requests.post(
+            f"{DOUBAO_BASE}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {DOUBAO_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": DOUBAO_MODEL,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                        {"type": "text", "text": CLASSIFY_PROMPT}
+                    ]
+                }],
+                "max_tokens": 10,
+                "temperature": 0.1
+            },
+            timeout=30
+        )
+        result = resp.json()
+        category = result["choices"][0]["message"]["content"].strip()
+        # 清理：去掉标点、换行
+        category = category.replace("\n", "").replace("。", "").replace("，", "").replace("、", "").replace(",", "").replace(" ", "")
+        return safe_filename(category) or "其他"
+    except Exception as e:
+        print(f"[AI分类错误] {e}")
+        return None
+
+def ai_classify_video(video_path):
+    """提取视频首帧，用 AI 分类"""
+    try:
+        frame_path = video_path + ".frame.jpg"
+        subprocess.run([
+            "ffmpeg", "-y", "-i", str(video_path),
+            "-vframes", "1", "-q:v", "3",
+            frame_path
+        ], capture_output=True, timeout=15)
+        if os.path.exists(frame_path) and os.path.getsize(frame_path) > 100:
+            cat = ai_classify_image(frame_path)
+            os.remove(frame_path)
+            return cat
+    except Exception as e:
+        print(f"[视频分类错误] {e}")
+    return "视频"
+
+def ai_classify(filepath):
+    """自动分类文件，返回文件夹名"""
+    mime, _ = mimetypes.guess_type(str(filepath))
+    if mime and mime.startswith("image/"):
+        return ai_classify_image(filepath)
+    elif mime and mime.startswith("video/"):
+        return ai_classify_video(filepath)
+    return None
 
 # ====== 路由 ======
 
 @app.route("/")
 def index():
-    folders = get_folders()
-    return render_template_string(HTML, folders=folders)
+    return render_template_string(HTML, folders=get_folders())
 
 @app.route("/uploads/<path:filepath>")
 def serve_upload(filepath):
@@ -79,7 +151,6 @@ def delete_folder(name):
     path = UPLOAD_DIR / safe_filename(name)
     if not path.exists() or not path.is_dir():
         return jsonify({"error": "not found"}), 404
-    # 不删非空文件夹防止误删
     if any(path.iterdir()):
         return jsonify({"error": "folder not empty"}), 400
     path.rmdir()
@@ -93,6 +164,8 @@ def list_files():
 @app.route("/api/upload", methods=["POST"])
 def upload():
     folder = safe_filename(request.form.get("folder", "").strip())
+    use_ai = request.form.get("ai", "0") == "1"
+    
     dest = UPLOAD_DIR / folder if folder else UPLOAD_DIR
     dest.mkdir(exist_ok=True)
 
@@ -104,17 +177,44 @@ def upload():
 
     ext = Path(f.filename).suffix or ""
     safe_name = f"{uuid.uuid4().hex[:8]}{ext}"
-    f.save(dest / safe_name)
+    save_path = dest / safe_name
+    f.save(save_path)
 
     mime, _ = mimetypes.guess_type(safe_name)
-    rel = f"{folder}/{safe_name}" if folder else safe_name
+    ai_folder = None
+
+    if use_ai:
+        cat = ai_classify(save_path)
+        if cat and cat != folder:
+            ai_folder = cat
+            new_dest = UPLOAD_DIR / cat
+            new_dest.mkdir(exist_ok=True)
+            new_path = new_dest / safe_name
+            save_path.rename(new_path)
+            save_path = new_path
+
+    rel = f"{ai_folder}/{safe_name}" if ai_folder else (f"{folder}/{safe_name}" if folder else safe_name)
     return jsonify({
         "name": safe_name,
         "original": f.filename,
-        "folder": folder,
+        "folder": ai_folder or folder,
         "url": f"/uploads/{rel}",
-        "is_image": bool(mime and mime.startswith("image/"))
+        "is_image": bool(mime and mime.startswith("image/")),
+        "ai_classified": ai_folder is not None,
+        "ai_category": ai_folder
     })
+
+@app.route("/api/classify", methods=["POST"])
+def classify_existing():
+    data = request.get_json() or {}
+    filepath = data.get("path", "")
+    if not filepath:
+        return jsonify({"error": "path required"}), 400
+    full = UPLOAD_DIR / filepath
+    if not full.exists():
+        return jsonify({"error": "not found"}), 404
+    cat = ai_classify(full)
+    return jsonify({"category": cat})
 
 @app.route("/api/download/<path:filepath>")
 def download_file(filepath):
@@ -136,7 +236,7 @@ def delete_file(filepath):
     full.unlink()
     return jsonify({"ok": True})
 
-# ====== 前端 HTML ======
+# ====== 前端 ======
 HTML = r"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -146,7 +246,6 @@ HTML = r"""<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0d0d0d;color:#d0d0d0;min-height:100vh;display:flex}
-/* 侧边栏 */
 .sidebar{width:220px;background:#141414;border-right:1px solid #222;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0}
 .sidebar-header{padding:16px;border-bottom:1px solid #222;font-weight:700;font-size:16px}
 .sidebar-folders{flex:1;overflow-y:auto;padding:8px}
@@ -160,16 +259,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .sidebar-add-folder input:focus{border-color:#4a90d9}
 .sidebar-add-folder button{background:#2a2a2a;border:none;border-radius:6px;color:#ccc;padding:6px 10px;cursor:pointer;font-size:12px}
 .sidebar-add-folder button:hover{background:#3a3a3a}
-/* 主区域 */
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
 .header{background:#141414;padding:12px 20px;border-bottom:1px solid #222;display:flex;align-items:center;gap:10px;flex-shrink:0}
 .header .breadcrumb{font-size:13px;color:#888;display:flex;gap:4px;align-items:center}
 .header .breadcrumb a{color:#6ab0f3;text-decoration:none;cursor:pointer}
-.header .breadcrumb a:hover{text-decoration:underline}
-.upload-zone{margin:16px 20px;border:2px dashed #2a2a2a;border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:all .15s;flex-shrink:0}
+.upload-zone{margin:16px 20px;border:2px dashed #2a2a2a;border-radius:10px;padding:28px;text-align:center;cursor:pointer;transition:all .15s;flex-shrink:0}
 .upload-zone:hover,.upload-zone.dragover{border-color:#4a90d9;background:rgba(74,144,217,.04)}
 .upload-zone p{color:#777;font-size:13px}
 .upload-zone .icon{font-size:32px;margin-bottom:8px}
+.upload-zone .ai-badge{display:inline-block;background:#1a3a5c;color:#6ab0f3;padding:2px 10px;border-radius:10px;font-size:11px;margin-top:8px;cursor:pointer;user-select:none;transition:all .15s}
+.upload-zone .ai-badge.off{background:#2a1515;color:#d55}
 #fileInput{display:none}
 .toolbar{padding:0 20px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0}
 .toolbar .count{color:#666;font-size:12px;margin-left:auto}
@@ -184,6 +283,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .card .info{padding:8px 10px}
 .card .name{font-size:11px;color:#bbb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
 .card .meta{font-size:10px;color:#555;display:flex;justify-content:space-between}
+.card .ai-tag{font-size:9px;background:#1a3520;color:#6a6;padding:1px 6px;border-radius:4px}
 .card .actions{display:flex;padding:0 10px 8px;gap:3px}
 .card .actions button{flex:1;padding:5px 0;border:none;border-radius:5px;cursor:pointer;font-size:10px;transition:all .12s}
 .btn-copy{background:#1e1e1e;color:#aaa}
@@ -226,15 +326,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
   <div class="header">
     <span style="font-weight:600;font-size:15px">📁 文件管理</span>
     <span style="color:#444">|</span>
-    <div class="breadcrumb" id="breadcrumb">
-      <a onclick="selectFolder('')">根目录</a>
-    </div>
+    <div class="breadcrumb" id="breadcrumb"><a onclick="selectFolder('')">根目录</a></div>
   </div>
 
   <div class="upload-zone" id="dropZone">
-    <div class="icon">📤</div>
-    <p>拖拽文件到这里 或 点击上传</p>
+    <div class="icon" id="uploadIcon">📤</div>
+    <p id="uploadText">拖拽文件到这里 或 点击上传</p>
     <p style="font-size:11px;margin-top:4px;color:#444">图片 · 视频 · 文档，最大 200MB</p>
+    <div class="ai-badge" id="aiToggle" onclick="toggleAI(event)">🤖 AI 分类：开</div>
   </div>
   <input type="file" id="fileInput" multiple>
 
@@ -245,13 +344,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
   <div class="grid" id="fileGrid"></div>
 </div>
 
-<!-- 预览弹窗 -->
 <div class="modal-overlay" id="previewModal" style="display:none" onclick="closePreview()">
   <div class="modal" id="previewContent" onclick="event.stopPropagation()"></div>
 </div>
 
 <script>
 let currentFolder = '';
+let aiEnabled = true;
 const BASE = window.location.origin;
 
 const dz = document.getElementById('dropZone');
@@ -266,16 +365,50 @@ dz.ondragleave = () => dz.classList.remove('dragover');
 dz.ondrop = e => { e.preventDefault(); dz.classList.remove('dragover'); uploadFiles(e.dataTransfer.files); };
 inp.onchange = () => { uploadFiles(inp.files); inp.value = ''; };
 
+function toggleAI(e) {
+  e.stopPropagation();
+  aiEnabled = !aiEnabled;
+  const badge = document.getElementById('aiToggle');
+  if (aiEnabled) {
+    badge.className = 'ai-badge';
+    badge.textContent = '🤖 AI 分类：开';
+  } else {
+    badge.className = 'ai-badge off';
+    badge.textContent = '📋 AI 分类：关';
+  }
+}
+
 async function uploadFiles(files) {
+  const icon = document.getElementById('uploadIcon');
+  const text = document.getElementById('uploadText');
+  
+  let results = [];
   for (const f of files) {
+    icon.textContent = aiEnabled ? '🔍' : '⏳';
+    text.textContent = aiEnabled ? `AI 识别中: ${f.name}` : `上传中: ${f.name}`;
+    
     const fd = new FormData();
     fd.append('file', f);
-    if (currentFolder) fd.append('folder', currentFolder);
+    if (!aiEnabled && currentFolder) fd.append('folder', currentFolder);
+    if (aiEnabled) fd.append('ai', '1');
+    
     try {
-      await fetch('/api/upload', { method: 'POST', body: fd });
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      results.push(data);
     } catch(e) { toast('❌ ' + f.name); }
   }
-  toast('✅ 完成');
+  
+  icon.textContent = '📤';
+  text.textContent = '拖拽文件到这里 或 点击上传';
+  
+  if (aiEnabled && results.some(r => r.ai_classified)) {
+    const cats = [...new Set(results.filter(r=>r.ai_category).map(r=>r.ai_category))];
+    toast('🤖 AI 已分类 → ' + cats.join(', '));
+  } else {
+    toast('✅ 完成');
+  }
+  
   loadFiles();
   loadFolders();
 }
@@ -305,9 +438,9 @@ async function loadFolders() {
   const data = await res.json();
   const list = document.getElementById('folderList');
   list.innerHTML = `<div class="folder${currentFolder===''?' active':''}" onclick="selectFolder('')" data-folder="">📂 全部文件</div>`;
-  data.folders.forEach(f => {
+  for (const f of data.folders) {
     list.innerHTML += `<div class="folder${currentFolder===f.name?' active':''}" onclick="selectFolder('${f.name}')" data-folder="${f.name}">📁 ${f.name} <span class="count">${f.count}</span></div>`;
-  });
+  }
 }
 
 async function loadFiles() {
@@ -322,10 +455,11 @@ async function loadFiles() {
   }
 
   grid.innerHTML = data.files.map(f => {
-    let preview;
+    let preview, badge = '';
     if (f.is_image) preview = `<img src="${f.url}" loading="lazy" onclick="preview('${f.url}','image')">`;
     else if (f.is_video) preview = `<div class="file-icon" onclick="preview('${f.url}','video')">🎬</div><div class="play-icon">▶</div>`;
     else preview = `<div class="file-icon">📄</div>`;
+    if (f.folder) badge = `<span class="ai-tag">📁 ${f.folder}</span>`;
 
     const rel = f.folder ? f.folder + '/' + f.name : f.name;
     return `
@@ -333,7 +467,7 @@ async function loadFiles() {
       <div class="preview">${preview}</div>
       <div class="info">
         <div class="name" title="${f.name}">${f.name}</div>
-        <div class="meta"><span>${fmtSize(f.size)}</span><span>${new Date(f.mtime).toLocaleDateString('zh-CN')}</span></div>
+        <div class="meta">${badge}<span>${fmtSize(f.size)}</span><span>${new Date(f.mtime).toLocaleDateString('zh-CN')}</span></div>
       </div>
       <div class="actions">
         <button class="btn-copy" onclick="copyLink('${BASE+f.url}')">🔗</button>
@@ -357,13 +491,11 @@ function closePreview() {
   const v = document.querySelector('#previewContent video');
   if (v) v.pause();
 }
-
 async function delFile(rel) {
   if (!confirm('确定删除 ' + rel + '？')) return;
   await fetch('/api/files/' + rel, { method:'DELETE' });
   toast('已删除');
-  loadFiles();
-  loadFolders();
+  loadFiles(); loadFolders();
 }
 function copyLink(url) {
   navigator.clipboard.writeText(url).then(() => toast('✅ 已复制'));
@@ -372,9 +504,7 @@ function downloadFile(rel) {
   const a = document.createElement('a');
   a.href = '/api/download/' + rel;
   a.download = rel.split('/').pop();
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
   toast('⬇ 下载中');
 }
 function fmtSize(b) {

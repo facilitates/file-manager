@@ -12,6 +12,16 @@ from modules.folders import folders_bp
 from modules.tools import tools_bp
 from modules.logview import logview_bp
 
+# 注册子模块路由到 files_bp（降低单文件耦合）
+from modules.trash import register_trash_routes
+from modules.sharing import register_sharing_routes
+from modules.duplicates import register_duplicate_routes
+from modules.preview import register_preview_routes
+register_trash_routes(files_bp)
+register_sharing_routes(files_bp)
+register_duplicate_routes(files_bp)
+register_preview_routes(files_bp)
+
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 

@@ -1,16 +1,13 @@
-"""文件 CRUD + 回收站 + 收藏 + 批量 + 分享过期 + 存储统计"""
+"""文件 CRUD + 批量操作 + 压缩/打包 + 统计 — 核心路由"""
+import io
 import os
 import re
 import uuid
-import subprocess
+import zipfile
 import mimetypes
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 
-import hashlib
-import pymysql
-import zipfile
-import io
 from flask import Blueprint, request, jsonify, session, send_file
 from flask import current_app as app_ctx
 
@@ -19,12 +16,9 @@ from .classify import safe_filename, start_classify_task
 
 files_bp = Blueprint('files', __name__)
 
-TEXT_EXTS = {'.txt', '.md', '.markdown', '.py', '.js', '.ts', '.json', '.xml', '.yaml', '.yml',
-             '.css', '.html', '.htm', '.sh', '.bash', '.cfg', '.ini', '.toml', '.env',
-             '.sql', '.log', '.csv', '.tsv', '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.h'}
-
 
 def normalize_filename(name: str) -> str:
+    """标准化中文文件名 -> 安全 ASCII"""
     stem, suffix = Path(name).stem, Path(name).suffix
     trans_map = {ord(c): r for c, r in {
         '（': '(', '）': ')', '：': '-', '；': '-', '！': '', '？': '', '。': '', '，': '',
@@ -43,6 +37,7 @@ def normalize_filename(name: str) -> str:
 
 
 def get_files_for_user(folder_name: str, user_id: int, favorites_only=False, public_owner=None) -> list:
+    """查询用户可见文件列表，支持公开文件夹浏览"""
     conn = get_db()
     cur = conn.cursor()
     base_sql = """
@@ -56,19 +51,13 @@ def get_files_for_user(folder_name: str, user_id: int, favorites_only=False, pub
         LEFT JOIN favorites fv ON fv.file_id = fl.id AND fv.user_id = %s
     """
 
-    # 支持查看他人的公开文件夹（public_owner_id != user_id）
     public_owner_id = public_owner or 0
     if folder_name:
-        owner_filter = "AND f.owner_id = %s"
-        owner_val = user_id if public_owner_id == user_id else public_owner_id
-        if public_owner_id and public_owner_id != user_id:
-            # 查看别人公开文件夹：不过滤 owner，在下面只显示公开文件
-            owner_filter = "AND f.owner_id = %s"
-            owner_val = public_owner_id
-
-        sql = base_sql.format("f.name") + f"""\n            JOIN folders f ON f.id = fl.folder_id
-            WHERE fl.deleted = 0 AND f.name = %s {owner_filter}
-            {{}}
+        owner_val = public_owner_id if public_owner_id and public_owner_id != user_id else user_id
+        sql = base_sql.format("f.name") + """
+            JOIN folders f ON f.id = fl.folder_id
+            WHERE fl.deleted = 0 AND f.name = %s AND f.owner_id = %s
+            {}
             ORDER BY fl.created_at DESC
         """
         cur.execute(sql.format("AND fv.user_id IS NOT NULL" if favorites_only else ""),
@@ -119,7 +108,7 @@ def get_files_for_user(folder_name: str, user_id: int, favorites_only=False, pub
     return files
 
 
-# ==================== 路由 ====================
+# ==================== 核心路由 ====================
 
 @files_bp.route("/api/files")
 def list_files():
@@ -195,11 +184,9 @@ def upload():
     })
 
 
-# ---- 重命名 ----
 @files_bp.route("/api/files/<path:filepath>/rename", methods=["PUT"])
 def rename_file(filepath):
     path = Path(filepath)
-    folder = str(path.parent) if path.parent != Path(".") else ""
     fname = path.name
     data = request.get_json() or {}
     new_name = data.get("name", "").strip()
@@ -222,7 +209,6 @@ def rename_file(filepath):
     return jsonify({"ok": True, "name": new_name})
 
 
-# ---- 删除（移入回收站） ----
 @files_bp.route("/api/files/<path:filepath>", methods=["DELETE"])
 def delete_file(filepath):
     path = Path(filepath)
@@ -249,157 +235,6 @@ def delete_file(filepath):
     return jsonify({"ok": True, "trash": True})
 
 
-# ---- 回收站 ----
-@files_bp.route("/api/trash")
-def list_trash():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id, uuid_name, original_name, original_folder, size, mime_type, deleted_at FROM trash WHERE owner_id = %s ORDER BY deleted_at DESC", (session['user_id'],))
-    now = datetime.now()
-    items = []
-    for r in cur.fetchall():
-        deleted_at = r[6]
-        remaining = 30 - (now - deleted_at).days if deleted_at else 0
-        items.append({
-            "id": r[0], "uuid_name": r[1], "original_name": r[2],
-            "original_folder": r[3], "size": r[4], "mime_type": r[5],
-            "deleted_at": deleted_at.isoformat() if deleted_at else "",
-            "remaining_days": max(remaining, 0)
-        })
-    cur.close(); conn.close()
-    return jsonify({"items": items})
-
-
-@files_bp.route("/api/trash/<int:tid>/restore", methods=["POST"])
-def restore_trash(tid):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM trash WHERE id = %s AND owner_id = %s", (tid, session['user_id']))
-    row = cur.fetchone()
-    if not row:
-        cur.close(); conn.close()
-        return jsonify({"error": "not found"}), 404
-    cur.execute("UPDATE files SET deleted = 0 WHERE uuid_name = %s AND deleted = 1", (row[1],))
-    cur.execute("DELETE FROM trash WHERE id = %s", (tid,))
-    conn.commit()
-    cur.close(); conn.close()
-    invalidate_cache()
-    return jsonify({"ok": True})
-
-
-@files_bp.route("/api/trash/<int:tid>", methods=["DELETE"])
-def permanent_delete(tid):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT uuid_name, original_path, owner_id FROM trash WHERE id = %s", (tid,))
-    row = cur.fetchone()
-    if not row or row[2] != session['user_id']:
-        cur.close(); conn.close()
-        return jsonify({"error": "not found"}), 404
-    uuid_name, orig_path, _ = row
-    # 删文件
-    upload_dir = app_ctx.config['UPLOAD_DIR']
-    full = upload_dir / orig_path
-    if full.exists():
-        full.unlink()
-    # 删 files 表记录
-    cur.execute("DELETE FROM files WHERE uuid_name = %s", (uuid_name,))
-    cur.execute("DELETE FROM trash WHERE id = %s", (tid,))
-    conn.commit()
-    cur.close(); conn.close()
-    invalidate_cache()
-    return jsonify({"ok": True})
-
-
-@files_bp.route("/api/trash/empty", methods=["POST"])
-def empty_trash():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT uuid_name, original_path FROM trash WHERE owner_id = %s", (session['user_id'],))
-    rows = cur.fetchall()
-    upload_dir = app_ctx.config['UPLOAD_DIR']
-    for uuid_name, orig_path in rows:
-        full = upload_dir / orig_path
-        if full.exists():
-            full.unlink()
-    cur.execute("DELETE FROM files WHERE uuid_name IN (SELECT uuid_name FROM trash WHERE owner_id = %s)", (session['user_id'],))
-    cur.execute("DELETE FROM trash WHERE owner_id = %s", (session['user_id'],))
-    conn.commit()
-    cur.close(); conn.close()
-    invalidate_cache()
-    return jsonify({"ok": True})
-
-
-@files_bp.route("/api/trash/batch-restore", methods=["POST"])
-def batch_restore_trash():
-    """批量恢复回收站文件"""
-    data = request.get_json() or {}
-    ids = data.get("ids", [])
-    if not ids:
-        return jsonify({"error": "no ids"}), 400
-    conn = get_db()
-    cur = conn.cursor()
-    for tid in ids:
-        cur.execute("SELECT uuid_name FROM trash WHERE id = %s AND owner_id = %s", (tid, session['user_id']))
-        row = cur.fetchone()
-        if row:
-            cur.execute("UPDATE files SET deleted = 0 WHERE uuid_name = %s AND deleted = 1", (row[0],))
-            cur.execute("DELETE FROM trash WHERE id = %s", (tid,))
-    conn.commit()
-    cur.close(); conn.close()
-    invalidate_cache()
-    return jsonify({"ok": True, "restored": len(ids)})
-
-
-@files_bp.route("/api/trash/batch-delete", methods=["POST"])
-def batch_permanent_delete():
-    """批量永久删除回收站文件"""
-    data = request.get_json() or {}
-    ids = data.get("ids", [])
-    if not ids:
-        return jsonify({"error": "no ids"}), 400
-    conn = get_db()
-    cur = conn.cursor()
-    upload_dir = app_ctx.config['UPLOAD_DIR']
-    for tid in ids:
-        cur.execute("SELECT uuid_name, original_path FROM trash WHERE id = %s AND owner_id = %s", (tid, session['user_id']))
-        row = cur.fetchone()
-        if row:
-            full = upload_dir / row[1]
-            if full.exists():
-                full.unlink()
-            cur.execute("DELETE FROM files WHERE uuid_name = %s", (row[0],))
-            cur.execute("DELETE FROM trash WHERE id = %s", (tid,))
-    conn.commit()
-    cur.close(); conn.close()
-    invalidate_cache()
-    return jsonify({"ok": True, "deleted": len(ids)})
-
-
-# ---- 收藏 ----
-@files_bp.route("/api/files/<name>/fav", methods=["POST"])
-def toggle_fav(name):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM files WHERE uuid_name = %s AND deleted = 0", (name,))
-    row = cur.fetchone()
-    if not row:
-        cur.close(); conn.close()
-        return jsonify({"error": "not found"}), 404
-    fid = row[0]
-    cur.execute("SELECT id FROM favorites WHERE user_id = %s AND file_id = %s", (session['user_id'], fid))
-    if cur.fetchone():
-        cur.execute("DELETE FROM favorites WHERE user_id = %s AND file_id = %s", (session['user_id'], fid))
-        fav = False
-    else:
-        cur.execute("INSERT INTO favorites (user_id, file_id) VALUES (%s, %s)", (session['user_id'], fid))
-        fav = True
-    conn.commit()
-    cur.close(); conn.close()
-    return jsonify({"ok": True, "fav": fav})
-
-
-# ---- 批量操作 ----
 @files_bp.route("/api/batch", methods=["POST"])
 def batch_operation():
     data = request.get_json() or {}
@@ -444,14 +279,12 @@ def batch_operation():
     return jsonify({"ok": True})
 
 
-# ---- 存储概览 ----
 @files_bp.route("/api/stats")
 def storage_stats():
     conn = get_db()
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*), COALESCE(SUM(size),0) FROM files WHERE owner_id = %s AND deleted = 0", (session['user_id'],))
     total_files, total_size = cur.fetchone()
-    # 按类型
     cur.execute("""
         SELECT CASE
             WHEN is_image THEN 'image' WHEN is_video THEN 'video'
@@ -464,21 +297,19 @@ def storage_stats():
         GROUP BY category
     """, (session['user_id'],))
     by_type = [{"type": r[0], "count": r[1], "size": r[2]} for r in cur.fetchall()]
-    # 回收站
     cur.execute("SELECT COUNT(*), COALESCE(SUM(size),0) FROM trash WHERE owner_id = %s", (session['user_id'],))
     trash_count, trash_size = cur.fetchone()
     cur.close(); conn.close()
     return jsonify({
         "total_files": total_files, "total_size": total_size,
+        "storage_bytes": total_size,
         "by_type": by_type,
         "trash_count": trash_count or 0, "trash_size": trash_size or 0
     })
 
 
-# ---- 文件压缩 ----
 @files_bp.route("/api/compress/<path:filepath>", methods=["POST"])
 def compress_file(filepath):
-    """压缩单张图片，返回新文件"""
     path = Path(filepath)
     folder = str(path.parent) if path.parent != Path(".") else ""
     fname = path.name
@@ -506,7 +337,6 @@ def compress_file(filepath):
             new_name = f"{Path(oname).stem}_compressed.jpg"
             uuid_name = f"{uuid.uuid4().hex[:8]}.jpg"
             new_path = full.parent / uuid_name
-            # 转 RGB + 压缩
             if img.mode in ('RGBA', 'P'):
                 img = img.convert('RGB')
             img.save(new_path, 'JPEG', quality=60, optimize=True)
@@ -518,7 +348,6 @@ def compress_file(filepath):
         cur.close(); conn.close()
         return jsonify({"error": "仅支持图片压缩"}), 400
 
-    # 写入数据库
     cur.execute("""INSERT INTO files (uuid_name, original_name, folder_id, size, mime_type,
                    is_image, is_video, classify_status, owner_id, visibility, deleted)
                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'private',0)""",
@@ -535,10 +364,8 @@ def compress_file(filepath):
     })
 
 
-# ---- 打包下载 ----
 @files_bp.route("/api/zip", methods=["POST"])
 def zip_download():
-    """将选中的多个文件打包为 zip 并下载"""
     data = request.get_json() or {}
     files_list = data.get("files", [])
     if not files_list:
@@ -552,7 +379,6 @@ def zip_download():
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         for rel in files_list:
             path = Path(rel)
-            folder = str(path.parent) if path.parent != Path(".") else ""
             fname = path.name
             cur.execute("SELECT id, owner_id, original_name FROM files WHERE uuid_name = %s AND deleted = 0", (fname,))
             row = cur.fetchone()
@@ -560,250 +386,9 @@ def zip_download():
                 continue
             full = upload_dir / Path(rel)
             if full.exists():
-                zf.write(full, row[2])  # 用原始文件名
+                zf.write(full, row[2])
 
     cur.close(); conn.close()
     buf.seek(0)
     return send_file(buf, mimetype='application/zip', as_attachment=True,
                      download_name=f"files_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip")
-
-
-# ---- 重复文件检测 ----
-@files_bp.route("/api/duplicates")
-def find_duplicates():
-    """扫描当前用户的所有文件，按 MD5 哈希分组，返回重复文件组"""
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT id, uuid_name, original_name, folder_id, size, mime_type, is_image, is_video
-        FROM files WHERE owner_id = %s AND deleted = 0
-    """, (session['user_id'],))
-    rows = cur.fetchall()
-    cur.close()
-    conn.close()
-
-    upload_dir = app_ctx.config['UPLOAD_DIR']
-    hash_groups = {}  # md5 -> [file_info, ...]
-
-    for row in rows:
-        fid, uname, oname, fold_id, sz, mime, is_img, is_vid = row
-        folder_name = ""
-        # 构建完整路径
-        if fold_id:
-            cur2 = get_db().cursor()
-            cur2.execute("SELECT name FROM folders WHERE id = %s", (fold_id,))
-            fr = cur2.fetchone()
-            folder_name = fr[0] if fr else ""
-            cur2.close()
-            full_path = upload_dir / folder_name / uname
-        else:
-            full_path = upload_dir / uname
-
-        if not full_path.exists():
-            continue
-
-        try:
-            md5 = hashlib.md5(full_path.read_bytes()).hexdigest()
-        except Exception:
-            continue
-
-        rel = f"{folder_name}/{uname}" if folder_name else uname
-        file_info = {
-            "id": fid, "name": uname, "original": oname,
-            "size": sz, "mime": mime or "",
-            "is_image": bool(is_img), "is_video": bool(is_vid),
-            "folder": folder_name or "", "rel": rel,
-            "url": f"/uploads/{rel}"
-        }
-        if md5 not in hash_groups:
-            hash_groups[md5] = []
-        hash_groups[md5].append(file_info)
-
-    # 只返回有重复的组（>1个文件）
-    duplicates = []
-    saved = 0
-    for md5, files in hash_groups.items():
-        if len(files) > 1:
-            duplicates.append({"hash": md5[:12], "files": files})
-            saved += files[0]["size"] * (len(files) - 1)
-
-    return jsonify({
-        "groups": duplicates,
-        "total_groups": len(duplicates),
-        "total_duplicates": sum(len(g["files"]) - 1 for g in duplicates),
-        "wasted_bytes": saved
-    })
-
-
-# ---- 分享过期 ----
-@files_bp.route("/api/files/<name>/expire", methods=["PUT"])
-def set_share_expire(name):
-    data = request.get_json() or {}
-    days = int(data.get("days", 0))
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id, owner_id FROM files WHERE uuid_name = %s AND deleted = 0", (name,))
-    row = cur.fetchone()
-    if not row:
-        cur.close(); conn.close()
-        return jsonify({"error": "not found"}), 404
-    if row[1] != session['user_id']:
-        cur.close(); conn.close()
-        return jsonify({"error": "仅拥有者可设置"}), 403
-    expires = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S') if days > 0 else None
-    cur.execute("UPDATE files SET share_expires_at = %s WHERE id = %s", (expires, row[0]))
-    conn.commit()
-    cur.close(); conn.close()
-    return jsonify({"ok": True, "expires_in_days": days})
-
-
-# ---- 可见性 ----
-@files_bp.route("/api/files/<name>/visibility", methods=["PUT"])
-def toggle_visibility(name):
-    data = request.get_json() or {}
-    new_vis = data.get("visibility", "").strip()
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id, owner_id FROM files WHERE uuid_name = %s AND deleted = 0", (name,))
-    row = cur.fetchone()
-    if not row:
-        cur.close(); conn.close()
-        return jsonify({"error": "not found"}), 404
-    if row[1] != session['user_id']:
-        cur.close(); conn.close()
-        return jsonify({"error": "仅文件拥有者可修改权限"}), 403
-    if new_vis not in ("private", "public", "shared"):
-        return jsonify({"error": "无效的可见性值"}), 400
-    cur.execute("UPDATE files SET visibility = %s WHERE id = %s", (new_vis, row[0]))
-    conn.commit()
-    cur.close(); conn.close()
-    return jsonify({"ok": True, "visibility": new_vis})
-
-
-# ---- 共享 ----
-@files_bp.route("/api/files/<name>/share", methods=["POST"])
-def share_file(name):
-    data = request.get_json() or {}
-    user_ids = data.get("user_ids", [])
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id, owner_id FROM files WHERE uuid_name = %s AND deleted = 0", (name,))
-    row = cur.fetchone()
-    if not row:
-        cur.close(); conn.close()
-        return jsonify({"error": "not found"}), 404
-    fid, owner_id = row
-    if owner_id != session['user_id']:
-        cur.close(); conn.close()
-        return jsonify({"error": "仅文件拥有者可设置共享"}), 403
-    cur.execute("DELETE FROM file_shares WHERE file_id = %s", (fid,))
-    for uid in user_ids:
-        if uid != owner_id:
-            try:
-                cur.execute("INSERT INTO file_shares (file_id, user_id) VALUES (%s, %s)", (fid, uid))
-            except pymysql.err.IntegrityError:
-                pass
-    conn.commit()
-    cur.close(); conn.close()
-    return jsonify({"ok": True, "shared_with": user_ids})
-
-
-@files_bp.route("/api/files/<name>/shares")
-def get_shares(name):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT id, owner_id FROM files WHERE uuid_name = %s AND deleted = 0", (name,))
-    row = cur.fetchone()
-    if not row:
-        cur.close(); conn.close()
-        return jsonify({"error": "not found"}), 404
-    if row[1] != session['user_id']:
-        cur.close(); conn.close()
-        return jsonify({"error": "仅文件拥有者可查看共享列表"}), 403
-    cur.execute("SELECT u.id, u.username FROM file_shares fs JOIN users u ON u.id = fs.user_id WHERE fs.file_id = %s", (row[0],))
-    shares = [{"id": r[0], "username": r[1]} for r in cur.fetchall()]
-    cur.close(); conn.close()
-    return jsonify({"shares": shares})
-
-
-# ---- 分类状态 ----
-@files_bp.route("/api/classify-status/<name>")
-def classify_status(name):
-    stat = rds.get(f"fm:classify:{name}")
-    if stat:
-        return jsonify({"name": name, "status": stat})
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute("SELECT classify_status, ai_category FROM files WHERE uuid_name = %s", (name,))
-    row = cur.fetchone()
-    cur.close(); conn.close()
-    if row:
-        if row[0] == "done":
-            return jsonify({"name": name, "status": row[1] or "done"})
-        return jsonify({"name": name, "status": row[0] or "unknown"})
-    return jsonify({"name": name, "status": "unknown"})
-
-
-@files_bp.route("/api/classify-batch", methods=["POST"])
-def classify_batch_status():
-    data = request.get_json() or {}
-    names = data.get("names", [])
-    result = {n: rds.get(f"fm:classify:{n}") or "unknown" for n in names}
-    return jsonify({"statuses": result})
-
-
-# ---- 文本读取 ----
-@files_bp.route("/api/read/<path:filepath>")
-def read_file_content(filepath):
-    path = Path(filepath)
-    folder = str(path.parent) if path.parent != Path(".") else ""
-    fname = path.name
-    full = app_ctx.config['UPLOAD_DIR'] / folder / fname
-    if not full.exists():
-        return jsonify({"error": "not found"}), 404
-    ext = full.suffix.lower()
-    if ext not in TEXT_EXTS:
-        return jsonify({"error": "unsupported type"}), 400
-    try:
-        content = full.read_text(encoding='utf-8')
-    except UnicodeDecodeError:
-        try:
-            content = full.read_text(encoding='gbk')
-        except:
-            return jsonify({"error": "cannot decode"}), 400
-    if len(content) > 500 * 1024:
-        content = content[:500 * 1024] + "\n\n... (文件过大，仅显示前 500KB)"
-    is_md = ext in ('.md', '.markdown')
-    return jsonify({"content": content, "type": "markdown" if is_md else "text", "name": fname})
-
-
-# ---- PPT 预览 ----
-PPT_CACHE_DIR = Path(__file__).parent.parent / "ppt_cache"
-PPT_CACHE_DIR.mkdir(exist_ok=True)
-
-
-@files_bp.route("/api/preview/ppt/<path:filepath>")
-def preview_ppt(filepath):
-    path = Path(filepath)
-    folder = str(path.parent) if path.parent != Path(".") else ""
-    fname = path.name
-    full = app_ctx.config['UPLOAD_DIR'] / folder / fname
-    if not full.exists():
-        return jsonify({"error": "not found"}), 404
-    cache_key = fname.rsplit('.', 1)[0]
-    cache_dir = PPT_CACHE_DIR / cache_key
-    if not cache_dir.exists() or not any(cache_dir.iterdir()):
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            subprocess.run(["libreoffice", "--headless", "--convert-to", "png", "--outdir", str(cache_dir), str(full)],
-                           capture_output=True, timeout=60, check=True)
-        except subprocess.CalledProcessError:
-            return jsonify({"error": "PPT 转换失败"}), 500
-    slides = sorted(cache_dir.glob("*.png"))
-    urls = [f"/api/preview/ppt-img/{cache_key}/{s.name}" for s in slides]
-    return jsonify({"slides": urls, "count": len(slides)})
-
-
-@files_bp.route("/api/preview/ppt-img/<cache_key>/<img_name>")
-def serve_ppt_img(cache_key, img_name):
-    return send_file(PPT_CACHE_DIR / cache_key / img_name, mimetype='image/png')

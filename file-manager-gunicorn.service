@@ -10,7 +10,6 @@ ExecStart=/home/ubuntu/file-manager/venv/bin/gunicorn -w 4 -b 0.0.0.0:5000 --tim
 Restart=always
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1
-Environment=SECRET_KEY=245985ad5a313bafdb921edd74d38c9223815a7838f7077a5c6977bc80dfd617
 
 [Install]
 WantedBy=multi-user.target

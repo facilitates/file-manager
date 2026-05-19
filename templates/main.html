@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="档案室">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>📚 档案室 — 你的私人资料馆</title>
+<style>
+:root {
+  --bg-base: #090d12;
+  --bg-surface: rgba(15,20,28,0.82);
+  --bg-surface-hover: rgba(22,28,38,0.88);
+  --bg-glass: rgba(18,24,34,0.65);
+  --bg-glass-hover: rgba(24,32,44,0.78);
+  --bg-elevated: rgba(28,36,50,0.9);
+  --glass-border: rgba(240,160,64,0.08);
+  --glass-border-hover: rgba(240,160,64,0.18);
+  --glass-shadow: 0 4px 32px rgba(0,0,0,0.3);
+  --glass-blur: 16px;
+  --accent: #f0a040;
+  --accent-glow: rgba(240,160,64,0.2);
+  --accent-dim: #d4892a;
+  --accent-text: #f5c070;
+  --sage: #2dd4bf;
+  --sage-dim: #0d9488;
+  --sage-glow: rgba(45,212,191,0.12);
+  --success: #3fb950;
+  --danger: #f85149;
+  --danger-glow: rgba(248,81,73,0.12);
+  --warning: #f0a040;
+  --info: #58a6ff;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-tertiary: #484f58;
+  --text-inverse: #0d1117;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-10: 40px; --space-12: 48px;
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px; --radius-xl: 18px;
+  --font-body: 'Plus Jakarta Sans','Noto Sans SC',-apple-system,sans-serif;
+  --font-mono: 'JetBrains Mono','Fira Code',monospace;
+  --font-size-xs: 11px; --font-size-sm: 12px; --font-size-md: 13px; --font-size-lg: 15px; --font-size-xl: 18px;
+  --duration-fast: .15s; --duration-md: .25s;
+  --ease-out: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:var(--font-body);background:var(--bg-base);color:var(--text-primary);
+  display:flex;-webkit-font-smoothing:antialiased;
+}
+.bg-noise{
+  position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.03;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:256px;
+}
+.sidebar{
+  position:relative;z-index:10;width:240px;min-width:240px;height:100vh;
+  background:var(--bg-surface);border-right:1px solid var(--glass-border);
+  backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.sidebar-brand{padding:var(--space-4) var(--space-4) var(--space-2);display:flex;align-items:center;gap:var(--space-2)}
+.sidebar-brand .logo{font-size:22px}
+.sidebar-brand h2{font-size:var(--font-size-lg);font-weight:700;color:var(--accent-text)}
+.sidebar-user{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-4);margin-bottom:var(--space-2)}
+.sidebar-user .avatar{font-size:20px}
+.sidebar-user .name{color:var(--text-primary);font-size:var(--font-size-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sidebar-user .logout{color:var(--text-tertiary);cursor:pointer;margin-left:auto;font-size:var(--font-size-xs);padding:var(--space-1) var(--space-2);border-radius:var(--radius-sm);transition:all var(--duration-fast) var(--ease-out)}
+.sidebar-user .logout:hover{color:var(--danger);background:var(--danger-glow)}
+.sidebar-folders{flex:1;overflow-y:auto;padding:var(--space-3)}
+.sidebar-folders .folder{
+  display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);
+  border-radius:var(--radius-sm);cursor:pointer;transition:all var(--duration-fast);
+  font-size:var(--font-size-md);color:var(--text-secondary);position:relative;
+  margin-bottom:1px;
+}
+.sidebar-folders .folder:hover{background:var(--bg-glass-hover);color:var(--text-primary)}
+.sidebar-folders .folder.active{background:var(--accent-glow);color:var(--accent-text);font-weight:600}
+.sidebar-folders .folder.active::before{content:'';position:absolute;left:0;top:6px;bottom:6px;width:3px;background:var(--accent);border-radius:0 3px 3px 0}
+.sidebar-folders .folder .icon{font-size:15px;width:20px;text-align:center;flex-shrink:0}
+.sidebar-folders .folder .label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sidebar-folders .folder .count{font-size:10px;color:var(--text-tertiary);background:var(--bg-glass);padding:1px 6px;border-radius:10px}
+.sidebar-folders .folder .del-btn{display:none;color:var(--text-tertiary);border:none;background:none;cursor:pointer;font-size:14px;padding:2px;border-radius:4px;transition:all var(--duration-fast)}
+.sidebar-folders .folder:hover .del-btn{display:block}
+.sidebar-folders .folder .del-btn:hover{opacity:1;background:var(--danger-glow)}
+.sidebar-divider{font-size:var(--font-size-xs);color:var(--text-tertiary);padding:var(--space-3) var(--space-3) var(--space-1);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.sidebar-add{margin:var(--space-2) var(--space-3) var(--space-3);display:flex;gap:var(--space-2)}
+.sidebar-add input{flex:1;background:var(--bg-glass);border:1px solid var(--glass-border);border-radius:var(--radius-sm);padding:var(--space-2) var(--space-3);color:var(--text-primary);font-size:var(--font-size-sm);font-family:var(--font-body);outline:none}
+.sidebar-add input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.sidebar-add button{font-size:18px;background:var(--accent);color:var(--text-inverse);border:none;border-radius:var(--radius-sm);width:36px;cursor:pointer;font-weight:700;transition:all var(--duration-fast) var(--ease-spring)}
+.sidebar-add button:hover{background:var(--accent-dim);transform:scale(1.05)}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:1}
+.topbar{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-5);background:var(--bg-surface);border-bottom:1px solid var(--glass-border);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));z-index:20}
+.breadcrumb{font-size:var(--font-size-md);color:var(--text-secondary);display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+.breadcrumb a{color:var(--accent-text);cursor:pointer;text-decoration:none;font-weight:500}
+.breadcrumb a:hover{text-decoration:underline}
+.spacer{flex:1}
+.search-box{position:relative;display:flex;align-items:center}
+.search-box input{background:var(--bg-glass);border:1px solid var(--glass-border);border-radius:20px;padding:5px 32px 5px 12px;color:var(--text-primary);font-size:var(--font-size-sm);width:140px;outline:none;font-family:var(--font-body);transition:all var(--duration-fast)}
+.search-box input:focus{border-color:var(--accent);width:180px}
+.search-box .clear{position:absolute;right:8px;color:var(--text-tertiary);cursor:pointer;font-size:11px;display:none}
+.search-box .clear.visible{display:block}
+.sort-btn{background:var(--bg-glass);border:1px solid var(--glass-border);color:var(--text-secondary);padding:4px 10px;border-radius:6px;font-size:var(--font-size-xs);cursor:pointer;font-family:var(--font-body);transition:all var(--duration-fast)}
+.sort-btn.active{background:var(--accent);color:var(--text-inverse);border-color:var(--accent)}
+.batch-toggle-btn{display:none;background:var(--bg-surface);border:1.5px solid var(--glass-border);border-radius:20px;color:var(--text-secondary);padding:var(--space-1) var(--space-4);cursor:pointer;font-size:var(--font-size-xs);transition:all var(--duration-fast) var(--ease-out);font-family:var(--font-body);font-weight:600;white-space:nowrap;gap:var(--space-1);align-items:center}
+.batch-toggle-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-glow)}
+.batch-toggle-btn.active{background:var(--accent);border-color:var(--accent);color:var(--text-inverse)}
+.batch-toggle-btn.visible{display:inline-flex}
+.toolbox-quick-btn{background:var(--bg-surface);border:1.5px solid var(--glass-border);border-radius:20px;color:var(--text-secondary);padding:5px 12px;cursor:pointer;font-size:16px;transition:all .15s ease-out;font-family:var(--font-body);font-weight:600;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center}
+.toolbox-quick-btn:hover{color:var(--accent);border-color:var(--accent);background:var(--accent-glow);transform:scale(1.05)}
+.view-toggle{display:flex;gap:2px;background:var(--bg-glass);border-radius:var(--radius-sm);padding:2px}
+.view-toggle button{background:none;border:none;color:var(--text-tertiary);padding:4px 8px;border-radius:4px;cursor:pointer;font-size:15px;transition:all var(--duration-fast)}
+.view-toggle button.active{background:var(--accent);color:var(--text-inverse)}
+.console-bar{display:flex;align-items:center;padding:var(--space-1) var(--space-5);background:var(--bg-glass);border-bottom:1px solid var(--glass-border);gap:var(--space-4);font-size:var(--font-size-xs);color:var(--text-tertiary)}
+.console-bar .metric{display:flex;align-items:center;gap:var(--space-1)}
+.console-bar .metric .val{color:var(--text-secondary);font-weight:600}
+.console-bar .refresh{cursor:pointer;color:var(--accent);font-size:12px;transition:all var(--duration-fast);margin-left:auto}
+.console-bar .refresh:hover{color:var(--accent-text)}
+.batch-bar{display:none;align-items:center;padding:var(--space-2) var(--space-5);background:var(--accent-glow);border-bottom:1px solid var(--accent);gap:var(--space-3)}
+.batch-bar.show{display:flex}
+.batch-bar .count{font-size:var(--font-size-sm);color:var(--accent-text);font-weight:600}
+.batch-bar button{background:rgba(240,160,64,.15);border:1px solid var(--accent);color:var(--accent-text);padding:4px 14px;border-radius:var(--radius-sm);cursor:pointer;font-size:var(--font-size-xs);font-weight:600;font-family:var(--font-body);transition:all var(--duration-fast)}
+.batch-bar button:hover{background:var(--accent);color:var(--text-inverse)}
+.content-area{flex:1;overflow-y:auto;padding:var(--space-4) var(--space-5);position:relative}
+.drop-zone{border:2px dashed var(--glass-border);border-radius:var(--radius-lg);padding:var(--space-8);text-align:center;margin-bottom:var(--space-4);transition:all var(--duration-md);cursor:pointer}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:var(--accent-glow)}
+.drop-zone .icon{font-size:32px;margin-bottom:var(--space-2)}
+.drop-zone h3{font-size:var(--font-size-lg);color:var(--text-primary);margin-bottom:var(--space-1)}
+.drop-zone p{font-size:var(--font-size-sm);color:var(--text-tertiary)}
+.file-toolbar{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-4);flex-wrap:wrap}
+.file-toolbar .ai-btn{background:var(--sage-glow);border:1px solid var(--sage);color:var(--sage);padding:5px 14px;border-radius:var(--radius-sm);cursor:pointer;font-size:var(--font-size-xs);font-weight:600;font-family:var(--font-body);transition:all var(--duration-fast)}
+.file-toolbar .ai-btn:hover{background:var(--sage);color:var(--text-inverse)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-4)}
+.grid.list{display:flex;flex-direction:column;gap:var(--space-2)}
+.card{
+  background:var(--bg-glass);border:1px solid var(--glass-border);
+  border-radius:var(--radius-md);overflow:hidden;transition:all var(--duration-md) var(--ease-spring);
+  position:relative;animation:fadeIn .4s var(--ease-out) both;cursor:default;
+}
+.card:hover{border-color:var(--glass-border-hover);box-shadow:var(--glass-shadow);transform:translateY(-2px)}
+.card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 20px var(--accent-glow)}
+.card .preview{position:relative;aspect-ratio:1;background:var(--bg-base);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.card .preview img{width:100%;height:100%;object-fit:cover}
+.card .preview .file-icon{font-size:48px;opacity:.7}
+.card .preview .play-icon{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:36px;cursor:pointer;opacity:0;transition:opacity var(--duration-md);background:rgba(0,0,0,.3)}
+.card:hover .play-icon{opacity:1}
+.card .cb-overlay{position:absolute;top:var(--space-2);left:var(--space-2);z-index:5}
+.card.show-cb .preview{filter:brightness(.8)}
+.cb-overlay input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+.card .info{padding:var(--space-3) var(--space-3)}
+.card .name{font-size:var(--font-size-md);color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:var(--space-1);font-weight:600}
+.card .fav-star{color:var(--accent);cursor:pointer;font-size:14px;opacity:.2;transition:all var(--duration-fast) var(--ease-spring);display:inline-block;vertical-align:top;margin-left:2px}
+.card .fav-star.active,.card .fav-star:hover{opacity:1;transform:scale(1.2)}
+.card .meta{font-size:var(--font-size-xs);color:var(--text-tertiary);display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+.card .ai-tag{font-size:9px;background:var(--sage-glow);color:var(--sage);padding:2px 7px;border-radius:var(--radius-sm);font-weight:700}
+.card .classifying-tag{font-size:9px;background:var(--accent-glow);color:var(--accent);padding:2px 7px;border-radius:var(--radius-sm);font-weight:700;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
+.card .vis-tag{font-size:9px;padding:2px 7px;border-radius:var(--radius-sm);cursor:pointer;transition:all var(--duration-fast);font-weight:600;user-select:none}
+.card .vis-tag.private{background:var(--danger-glow);color:var(--danger)}
+.card .vis-tag.public{background:var(--sage-glow);color:var(--sage)}
+.card .vis-tag.shared{background:var(--accent-glow);color:var(--accent)}
+.card .actions{display:flex;gap:var(--space-1);padding:var(--space-2) var(--space-3);border-top:1px solid var(--glass-border)}
+.card .actions button{
+  background:var(--bg-glass);border:1px solid var(--glass-border);border-radius:var(--radius-sm);
+  color:var(--text-tertiary);padding:3px 8px;cursor:pointer;font-size:11px;transition:all var(--duration-fast)
+}
+.card .actions button:hover{color:var(--text-primary);border-color:var(--glass-border-hover)}
+.grid.list .card{display:flex;align-items:center;padding:var(--space-2) var(--space-3)}
+.grid.list .card .preview{width:40px;height:40px;aspect-ratio:unset;border-radius:var(--radius-sm);flex-shrink:0}
+.grid.list .card .preview .file-icon{font-size:24px}
+.grid.list .card .info{flex:1;padding:0 var(--space-3)}
+.grid.list .card .actions{border-top:none;border-left:1px solid var(--glass-border)}
+.grid.list .card .play-icon{display:none}
+.empty{text-align:center;padding:var(--space-12) var(--space-4);grid-column:1/-1}
+.empty .icon{font-size:48px;margin-bottom:var(--space-3);opacity:.3}
+.empty h3{font-size:var(--font-size-lg);color:var(--text-secondary);margin-bottom:var(--space-1)}
+.empty p{font-size:var(--font-size-sm);color:var(--text-tertiary)}
+.dup-toolbar{display:none;align-items:center;gap:var(--space-3);margin-bottom:var(--space-4)}
+.dup-toolbar.show{display:flex}
+.dup-grid{display:none;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:var(--space-4)}
+.dup-grid.show{display:grid}
+.dup-group{background:var(--bg-glass);border:1px solid var(--glass-border);border-radius:var(--radius-md);padding:var(--space-4)}
+.dup-group .hash{font-family:var(--font-mono);font-size:10px;color:var(--text-tertiary);margin-bottom:var(--space-2);word-break:break-all}
+.dup-group .size{font-size:var(--font-size-sm);color:var(--sage);margin-bottom:var(--space-3)}
+.dup-group .dup-item{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-1) 0;font-size:var(--font-size-sm);color:var(--text-secondary)}
+.dup-group .dup-item .keep{color:var(--success);font-weight:600;font-size:var(--font-size-xs)}
+.trash-toolbar{display:none;align-items:center;gap:var(--space-3);margin-bottom:var(--space-4)}
+.trash-toolbar.show{display:flex}
+.trash-grid{display:none;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:var(--space-3)}
+.trash-grid.show{display:grid}
+.trash-card{background:var(--bg-glass);border:1px solid var(--glass-border);border-radius:var(--radius-md);padding:var(--space-3);display:flex;align-items:center;gap:var(--space-3)}
+.trash-card .icon-big{font-size:28px;flex-shrink:0}
+.trash-card .info{flex:1;overflow:hidden}
+.trash-card .info .name{font-size:var(--font-size-md);color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:var(--space-1);font-weight:600}
+.trash-card .info .meta{font-size:var(--font-size-xs);color:var(--text-tertiary);display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center}
+.trash-card .actions{display:flex;gap:var(--space-1);flex-shrink:0}
+.trash-card .actions button{
+  background:var(--bg-glass);border:1px solid var(--glass-border);border-radius:var(--radius-sm);
+  color:var(--text-secondary);padding:3px 10px;cursor:pointer;font-size:var(--font-size-xs);font-family:var(--font-body);transition:all var(--duration-fast)
+}
+.trash-card .actions .btn-restore:hover{color:var(--sage);border-color:var(--sage)}
+.trash-card .actions .btn-purge:hover{color:var(--danger);border-color:var(--danger)}
+.expire-badge{font-size:9px;padding:1px 6px;border-radius:10px}
+.expire-badge.ok{background:var(--sage-glow);color:var(--sage)}
+.expire-badge.warn{background:var(--accent-glow);color:var(--accent)}
+.expire-badge.danger{background:var(--danger-glow);color:var(--danger)}
+.modal-overlay{display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.7);align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal{background:var(--bg-elevated);border:1px solid var(--glass-border);border-radius:var(--radius-xl);padding:var(--space-6);max-width:90vw;max-height:90vh;overflow-y:auto;box-shadow:var(--glass-shadow);position:relative}
+.modal img{max-width:100%;max-height:75vh;border-radius:var(--radius-md)}
+.modal video{max-width:100%;max-height:75vh;border-radius:var(--radius-md)}
+.text-preview{color:var(--text-primary);line-height:1.6}
+.text-preview .text-header{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--space-4);font-weight:700;font-size:var(--font-size-lg)}
+.text-preview pre{background:var(--bg-base);border-radius:var(--radius-md);padding:var(--space-4);overflow-x:auto;font-family:var(--font-mono);font-size:var(--font-size-sm);line-height:1.5}
+.text-action{background:var(--bg-glass);border:1px solid var(--glass-border);color:var(--text-secondary);padding:4px 12px;border-radius:var(--radius-sm);cursor:pointer;font-size:var(--font-size-sm);font-family:var(--font-body);transition:all var(--duration-fast)}
+.text-action:hover{color:var(--text-primary);border-color:var(--glass-border-hover)}
+.pdf-container{max-height:70vh;overflow-y:auto;background:var(--bg-base);border-radius:var(--radius-md);padding:var(--space-4)}
+.pdf-container canvas{display:block;margin:0 auto var(--space-3);max-width:100%}
+.vis-popup{position:fixed;z-index:200;background:var(--bg-elevated);border:1px solid var(--glass-border);border-radius:var(--radius-md);padding:var(--space-2);box-shadow:var(--glass-shadow);min-width:150px}
+.vis-option{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);border-radius:var(--radius-sm);cursor:pointer;transition:all var(--duration-fast);font-size:var(--font-size-sm);color:var(--text-primary)}
+.vis-option:hover{background:var(--bg-glass-hover)}
+.vis-option small{display:block;font-size:var(--font-size-xs);color:var(--text-tertiary)}
+.share-dialog{padding:var(--space-2)}
+.share-dialog h3{font-size:var(--font-size-xl);margin-bottom:var(--space-4);font-weight:700}
+.share-dialog .user-row{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;font-size:var(--font-size-md);border-bottom:1px solid var(--glass-border)}
+.share-dialog .btn-row{display:flex;gap:var(--space-2);margin-top:var(--space-5)}
+.share-dialog .btn-row button{flex:1;padding:var(--space-3);border-radius:var(--radius-sm);border:none;cursor:pointer;font-size:var(--font-size-md);font-weight:700;font-family:var(--font-body)}
+.share-dialog .btn-save{background:var(--accent);color:var(--text-inverse);box-shadow:0 0 16px var(--accent-glow)}
+.share-dialog .btn-cancel{background:var(--bg-surface);color:var(--text-secondary)}
+.share-dialog .expire-row{margin-top:var(--space-3);display:flex;align-items:center;gap:var(--space-2);font-size:var(--font-size-sm);color:var(--text-secondary)}
+.share-dialog .expire-row select{background:var(--bg-surface);border:1px solid var(--glass-border);color:var(--text-primary);padding:var(--space-1) var(--space-2);border-radius:var(--radius-sm);font-size:var(--font-size-sm);font-family:var(--font-body)}
+.confirm-overlay{display:none;position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);align-items:center;justify-content:center}
+.confirm-box{background:var(--bg-elevated);border:1px solid var(--glass-border);border-radius:var(--radius-lg);padding:var(--space-6);max-width:360px;text-align:center;box-shadow:var(--glass-shadow)}
+.confirm-box p{font-size:var(--font-size-md);color:var(--text-primary);margin-bottom:var(--space-5)}
+.confirm-box .btns{display:flex;gap:var(--space-2)}
+.confirm-box .btns button{flex:1;padding:var(--space-2) var(--space-4);border-radius:var(--radius-sm);border:none;cursor:pointer;font-weight:600;font-size:var(--font-size-sm);font-family:var(--font-body)}
+.confirm-box .btn-confirm{background:var(--danger);color:#fff}
+.confirm-box .btn-cancel{background:var(--bg-surface);color:var(--text-secondary)}
+.toast-container{position:fixed;top:var(--space-4);right:var(--space-4);z-index:500;display:flex;flex-direction:column;gap:var(--space-2)}
+.toast{padding:var(--space-3) var(--space-5);border-radius:var(--radius-md);font-size:var(--font-size-sm);font-weight:600;animation:slideIn .3s var(--ease-spring);pointer-events:none}
+.toast.success{background:rgba(63,185,80,.15);color:var(--success);border:1px solid var(--success)}
+.toast.error{background:var(--danger-glow);color:var(--danger);border:1px solid var(--danger)}
+.toast.info{background:var(--accent-glow);color:var(--accent-text);border:1px solid var(--accent)}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.mobile-menu{display:none;position:fixed;top:12px;left:12px;z-index:60;background:var(--bg-surface);border:1px solid var(--glass-border);border-radius:var(--radius-sm);color:var(--text-primary);padding:6px 10px;font-size:18px;cursor:pointer}
+@media(max-width:768px){
+  .sidebar{position:fixed;left:-260px;top:0;bottom:0;transition:left var(--duration-md) var(--ease-out);z-index:50}
+  .sidebar.open{left:0}
+  .mobile-menu{display:block}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+  .topbar{padding:var(--space-3) var(--space-3)}
+  .content-area{padding:var(--space-3)}
+  .search-box input{width:100px}
+  .search-box input:focus{width:140px}
+}
+</style>
+</head>
+<body>
+<div class="bg-noise"></div>
+<button class="mobile-menu" onclick="document.querySelector('.sidebar').classList.toggle('open')" aria-label="菜单">☰</button>
+
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-brand"><span class="logo">📚</span><h2>档案室</h2></div>
+  <div class="sidebar-user">
+    <span class="avatar">👤</span>
+    <span class="name" id="sidebarUsername">{{ user.username }}</span>
+    <span class="logout" onclick="logout()">退出</span>
+  </div>
+  <div class="sidebar-folders" id="folderList">
+    <div class="folder active" onclick="selectFolder('')" data-folder="" role="button" tabindex="0">
+      <span class="icon">📂</span><span class="label">全部文件</span>
+    </div>
+    <div class="folder" onclick="selectFolder('',true)" data-folder="__fav__" role="button" tabindex="0">
+      <span class="icon">⭐</span><span class="label">我的收藏</span>
+    </div>
+    <div class="sidebar-divider">文件夹</div>
+    {% for f in folders %}
+    <div class="folder" onclick="selectFolder('{{ f.name }}')" data-folder="{{ f.name }}">
+      <span class="icon">📁</span><span class="label">{{ f.name }}</span>
+      <span class="count">{{ f.count }}</span>
+      <button class="del-btn" onclick="deleteFolder('{{ f.name }}', event)" title="删除">×</button>
+    </div>
+    {% endfor %}
+    <div class="sidebar-divider">系统</div>
+    <div class="folder" onclick="showToolbox()" data-folder="__tools__" role="button" tabindex="0">
+      <span class="icon">🔧</span><span class="label">工具箱</span>
+    </div>
+    <div class="folder" onclick="showDuplicates()" data-folder="__dup__" role="button" tabindex="0">
+      <span class="icon">🔍</span><span class="label">重复文件</span>
+    </div>
+    <div class="folder" onclick="showTrash()" data-folder="__trash__" role="button" tabindex="0">
+      <span class="icon">🗑️</span><span class="label">回收站</span>
+    </div>
+  </div>
+  <div class="sidebar-add">
+    <input type="text" id="newFolderInput" placeholder="新建文件夹..." onkeydown="if(event.key==='Enter')addFolder()" aria-label="新建文件夹名称">
+    <button onclick="addFolder()" aria-label="创建文件夹">＋</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div class="breadcrumb" id="breadcrumb"><a onclick="selectFolder('')" role="button" tabindex="0">根目录</a></div>
+    <span class="spacer"></span>
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="搜索..." oninput="onSearch()" aria-label="搜索文件">
+      <span class="clear" id="searchClear" onclick="clearSearch()">✕</span>
+    </div>
+    <button class="sort-btn active" id="sortName" onclick="setSort('name')">A-Z</button>
+    <button class="sort-btn" id="sortSize" onclick="setSort('size')">大小</button>
+    <button class="toolbox-quick-btn" onclick="showToolbox()" title="工具箱">🧰</button>
+    <button id="batchToggle" class="batch-toggle-btn" onclick="toggleBatchMode()">☑️ 多选</button>
+    <div class="view-toggle">
+      <button class="active" onclick="setView('grid')" id="btnGrid" aria-label="网格视图">▦</button>
+      <button onclick="setView('list')" id="btnList" aria-label="列表视图">☰</button>
+    </div>
+  </div>
+  <div class="batch-bar" id="batchBar" role="toolbar" aria-label="批量操作">
+    <span class="count" id="batchCount">已选 0 项</span>
+    <span class="spacer"></span>
+    <button onclick="batchDelete()">🗑 删除</button>
+    <button onclick="batchMove()">📁 移动到...</button>
+    <button onclick="batchDownload()">⬇ 下载</button>
+    <button onclick="toggleBatchMode()">✕ 取消</button>
+  </div>
+  <div class="console-bar" id="consoleBar">
+    <div class="metric">📄 文件 <span class="val" id="consoleFileCount">0 个</span></div>
+    <div class="metric">💾 已用 <span class="val" id="consoleStorage">-</span></div>
+    <div class="metric">🗑 回收站 <span class="val" id="consoleTrash">-</span></div>
+    <span class="refresh" onclick="refreshConsole()" title="刷新统计">↻ 刷新</span>
+  </div>
+  <div class="content-area">
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div class="icon">📤</div>
+      <h3>拖拽文件到这里上传</h3>
+      <p>或点击选择 · 支持 Ctrl+V 粘贴</p>
+      <input type="file" id="fileInput" multiple style="display:none" onchange="uploadFiles(this.files)" aria-label="选择文件上传">
+    </div>
+    <div class="file-toolbar" id="fileToolbar">
+      <button class="ai-btn" onclick="classifyBatch()" title="AI 自动分类">🤖 AI 分类</button>
+    </div>
+    <div class="dup-toolbar" id="dupToolbar">
+      <span style="font-weight:700;color:var(--accent-text)">🔍 重复文件检测</span>
+      <span class="spacer"></span>
+      <button style="background:var(--danger);color:#fff;border:none;border-radius:6px;padding:4px 14px;cursor:pointer;font-weight:600" onclick="batchDeleteDuplicates()">🗑 批量清理</button>
+      <button style="background:var(--bg-surface);border:1px solid var(--glass-border);color:var(--text-secondary);border-radius:6px;padding:4px 14px;cursor:pointer" onclick="exitDupView()">← 返回</button>
+    </div>
+    <div class="trash-toolbar" id="trashToolbar">
+      <span style="font-weight:700;color:var(--text-primary)" id="trashInfo">回收站</span>
+      <span class="spacer"></span>
+      <button id="trashBatchBtn" style="background:var(--bg-surface);border:1px solid var(--glass-border);color:var(--text-secondary);border-radius:6px;padding:4px 14px;cursor:pointer;font-size:12px" onclick="toggleTrashBatch()">☑️ 多选</button>
+      <button style="background:var(--sage);color:#fff;border:none;border-radius:6px;padding:4px 14px;cursor:pointer;font-weight:600" onclick="batchRestoreTrash()">↩ 批量恢复</button>
+      <button style="background:var(--danger);color:#fff;border:none;border-radius:6px;padding:4px 14px;cursor:pointer;font-weight:600" onclick="emptyTrash()">🗑 清空</button>
+      <button style="background:var(--bg-surface);border:1px solid var(--glass-border);color:var(--text-secondary);border-radius:6px;padding:4px 14px;cursor:pointer" onclick="exitTrashView()">← 返回</button>
+    </div>
+    <div class="grid" id="fileGrid" role="list" aria-label="文件列表"></div>
+    <div class="dup-grid" id="dupGrid"></div>
+    <div class="trash-grid" id="trashGrid"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="previewModal" onclick="if(event.target===this)closePreview()">
+  <div class="modal" id="previewContent"></div>
+</div>
+
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-box">
+    <p id="confirmMsg"></p>
+    <div class="btns">
+      <button class="btn-cancel" onclick="closeConfirm()">取消</button>
+      <button class="btn-confirm" id="confirmBtn">确定</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const BASE=location.origin;
+let allFiles=[],allFolders=[],allUsers=[];
+let currentFolder='',favoritesOnly=false,currentSort='name',searchQuery='';
+let batchMode=false,selectedFiles=new Set();
+let viewMode='grid';
+let dupGroups=[],isDupView=false;
+let trashItems=[],trashBatchMode=false,trashSelected=new Set(),isTrashView=false;
+let currentPublicOwner=null;
+const bc=document.getElementById('breadcrumb'),grid=document.getElementById('fileGrid');
+
+// Init
+document.addEventListener('DOMContentLoaded',()=>{
+  loadFolders();loadFiles();refreshConsole();loadUsers();
+  // Drag & drop
+  const dz=document.getElementById('dropZone');
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over')});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');uploadFiles(e.dataTransfer.files)});
+  // Paste
+  document.addEventListener('paste',e=>{if(e.clipboardData.files.length)uploadFiles(e.clipboardData.files)});
+  // Keyboard shortcuts
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closePreview();closeConfirm();if(batchMode)toggleBatchMode()}});
+});
+
+// Toast
+function toast(msg,type='info'){
+  const c=document.getElementById('toastContainer');
+  const el=document.createElement('div');el.className='toast '+type;el.textContent=msg;
+  c.appendChild(el);setTimeout(()=>el.remove(),2500);
+}
+
+// Confirm
+function showConfirm(msg,cb){
+  document.getElementById('confirmMsg').textContent=msg;
+  document.getElementById('confirmOverlay').style.display='flex';
+  document.getElementById('confirmBtn').onclick=()=>{closeConfirm();cb()};
+}
+function closeConfirm(){document.getElementById('confirmOverlay').style.display='none'}
+
+// Preview
+function closePreview(){document.getElementById('previewModal').style.display='none'}
+function preview(url,type){
+  const m=document.getElementById('previewModal'),c=document.getElementById('previewContent');
+  m.style.display='flex';c.className='modal';c.style.maxWidth='90vw';
+  if(type==='image')c.innerHTML=`<img src="${url}" alt="预览">`;
+  else if(type==='video')c.innerHTML=`<video src="${url}" controls autoplay></video>`;
+}
+
+// Download
+function downloadFile(rel){window.open(BASE+'/uploads/'+rel,'_blank')}
+function copyLink(url){navigator.clipboard.writeText(url).then(()=>toast('链接已复制','success'))}
+
+// Logout
+async function logout(){await fetch('/api/logout',{method:'POST'});location.reload()}
+
+// Load users
+async function loadUsers(){try{const r=await fetch('/api/users');const d=await r.json();allUsers=d.users||[]}catch(e){}}
+
+// Format
+function fmtSize(b){if(!b)return'0 B';const u=['B','KB','MB','GB'];let i=0;while(b>=1024&&i<3){b/=1024;i++}return b.toFixed(i?1:0)+' '+u[i]}
+
+// ---- Folder nav ----
+function selectFolder(name,fav){
+  if(isTrashView)exitTrashView();
+  if(isDupView)exitDupView();
+  currentFolder=name;favoritesOnly=!!fav;currentPublicOwner=null;
+  document.querySelectorAll('.sidebar-folders .folder').forEach(el=>el.classList.remove('active'));
+  const el=document.querySelector(`.sidebar-folders [data-folder="${fav?'__fav__':name}"]`);
+  if(el)el.classList.add('active');
+  bc.innerHTML=fav?'<span>⭐ 我的收藏</span>':(name?`<a onclick="selectFolder('')" role="button" tabindex="0">根目录</a> <span>›</span> <span>${name}</span>`:`<a onclick="selectFolder('')" role="button" tabindex="0">根目录</a>`);
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('batchToggle').classList.toggle('visible',name||fav);
+  loadFiles();
+}
+function selectPublicFolder(name,ownerId){
+  if(isTrashView)exitTrashView();
+  if(isDupView)exitDupView();
+  currentFolder=name;favoritesOnly=false;currentPublicOwner=ownerId;
+  document.querySelectorAll('.sidebar-folders .folder').forEach(el=>el.classList.remove('active'));
+  const el=document.querySelector(`.sidebar-folders [data-folder="public_${ownerId}"]`);
+  if(el)el.classList.add('active');
+  bc.innerHTML='<a onclick="selectFolder(\'\')" role="button" tabindex="0">根目录</a> <span>›</span> <span>🌐 公开分享</span>';
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('batchToggle').classList.remove('visible');
+  loadFiles();
+}
+async function addFolder(){
+  const input=document.getElementById('newFolderInput'),name=input.value.trim();
+  if(!name)return;
+  const r=await fetch('/api/folders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  if(r.status===409){toast('文件夹已存在','error');return}
+  input.value='';loadFolders();toast('已创建','success');
+}
+async function deleteFolder(name,event){
+  event.stopPropagation();
+  showConfirm(`确定删除「${name}」？`,async()=>{
+    const r=await fetch('/api/folders/'+encodeURIComponent(name),{method:'DELETE'});
+    const d=await r.json();if(d.error){toast(d.error,'error');return}
+    if(currentFolder===name)selectFolder('');
+    loadFolders();toast('已删除','success');
+  });
+}
+async function loadFolders(){
+  try{
+    const r=await fetch('/api/folders');const d=await r.json();allFolders=d.folders||[];
+    const list=document.getElementById('folderList');
+    list.innerHTML=`<div class="folder${currentFolder===''&&!favoritesOnly&&!isTrashView&&!currentPublicOwner?' active':''}" onclick="selectFolder('')" data-folder="" role="button" tabindex="0"><span class="icon">📂</span><span class="label">全部文件</span></div><div class="folder${favoritesOnly&&!isTrashView?' active':''}" onclick="selectFolder('',true)" data-folder="__fav__" role="button" tabindex="0"><span class="icon">⭐</span><span class="label">我的收藏</span></div><div class="sidebar-divider">文件夹</div>`;
+    for(const f of d.folders)list.innerHTML+=`<div class="folder${currentFolder===f.name&&!favoritesOnly&&!isTrashView&&!currentPublicOwner?' active':''}" onclick="selectFolder('${f.name}')" data-folder="${f.name}"><span class="icon">📁</span><span class="label">${f.name}</span><span class="count">${f.count}</span><button class="del-btn" onclick="deleteFolder('${f.name}',event)" title="删除">×</button></div>`;
+    list.innerHTML+=`<div class="sidebar-divider">系统</div><div class="folder" onclick="showToolbox()" data-folder="__tools__"><span class="icon">🔧</span><span class="label">工具箱</span></div><div class="folder${isDupView?' active':''}" onclick="showDuplicates()" data-folder="__dup__"><span class="icon">🔍</span><span class="label">重复文件</span></div><div class="folder${isTrashView?' active':''}" onclick="showTrash()" data-folder="__trash__"><span class="icon">🗑️</span><span class="label">回收站</span></div>`;
+    loadPublicFolders();
+  }catch(e){}
+}
+// ---- File listing ----
+async function loadFiles(){
+  try{
+    let q=currentFolder?'?folder='+encodeURIComponent(currentFolder):(favoritesOnly?'?fav=1':'');
+    if(currentPublicOwner)q+=(q?'&':'?')+'public_owner='+currentPublicOwner;
+    const r=await fetch('/api/files'+q);const d=await r.json();
+    allFiles=d.files;document.getElementById('consoleFileCount').textContent=d.files.length+' 个';
+    renderFiles();refreshConsole();
+  }catch(e){grid.innerHTML='<div class="empty"><div class="icon">⚠️</div><h3>加载失败</h3></div>'}
+}
+
+function onSearch(){searchQuery=document.getElementById('searchInput').value.trim().toLowerCase();document.getElementById('searchClear').classList.toggle('visible',!!searchQuery);renderFiles()}
+function clearSearch(){document.getElementById('searchInput').value='';searchQuery='';document.getElementById('searchClear').classList.remove('visible');renderFiles()}
+function setSort(sort){currentSort=sort;document.querySelectorAll('.sort-btn').forEach(b=>b.classList.toggle('active',false));document.getElementById('sort'+sort[0].toUpperCase()+sort.slice(1)).classList.add('active');renderFiles()}
+function setView(v){viewMode=v;document.getElementById('btnGrid').classList.toggle('active',v==='grid');document.getElementById('btnList').classList.toggle('active',v==='list');grid.className=v==='list'?'grid list':'grid';renderFiles()}
+
+function getFileIcon(f){
+  if(f.is_image)return `<img src="${f.url}" loading="lazy" onclick="preview('${f.url}','image')" alt="${f.original||f.name}">`;
+  if(f.is_video)return `<div class="file-icon" onclick="preview('${f.url}','video')">🎬</div><div class="play-icon">▶</div>`;
+  const ext=(f.original||f.name||'').split('.').pop().toLowerCase();
+  if(ext==='pdf')return `<div class="file-icon" onclick="previewPDF('${f.rel}')">📕</div><div class="play-icon">📖</div>`;
+  const icons={doc:'📘',docx:'📘',xls:'📗',xlsx:'📗',ppt:'📊',pptx:'📊',zip:'📦',rar:'📦',gz:'📦',mp3:'🎵',txt:'📄',md:'📝',py:'🐍',js:'📜',html:'🌐',css:'🎨',json:'📋'};
+  const icon=icons[ext]||'📄';
+  const textExts=['txt','md','py','js','ts','json','xml','yaml','yml','css','html','sh','sql','log','csv','rb','go','rs','java','c','cpp','h'];
+  if(textExts.includes(ext))return `<div class="file-icon" onclick="previewText('${f.rel}','${ext}')">${icon}</div>`;
+  return `<div class="file-icon">${icon}</div>`;
+}
+
+function renderFiles(){
+  let files=[...allFiles];
+  if(searchQuery)files=files.filter(f=>(f.original||f.name).toLowerCase().includes(searchQuery)||(f.ai_category||'').toLowerCase().includes(searchQuery));
+  if(currentSort==='name')files.sort((a,b)=>(a.original||a.name).localeCompare(b.original||b.name));
+  else if(currentSort==='size')files.sort((a,b)=>b.size-a.size);
+  document.getElementById('consoleFileCount').textContent=searchQuery?`${files.length}/${allFiles.length} 个`:`${files.length} 个`;
+  if(!files.length){grid.innerHTML=`<div class="empty"><div class="icon">${searchQuery?'🔍':'📭'}</div><h3>${searchQuery?'没有匹配':'这里还是空的'}</h3><p>${searchQuery?'试试其他关键词':'拖拽文件到上方区域开始上传'}</p></div>`;return}
+  grid.innerHTML=files.map((f,i)=>{
+    let badge='';
+    if(f.classify_status==='classifying')badge+=`<span class="classifying-tag">🔍 分类中</span>`;
+    else if(f.ai_category)badge+=`<span class="ai-tag">🤖 ${f.ai_category}</span>`;
+    if(!f.is_owner)badge+=`<span style="font-size:9px;color:var(--text-tertiary)">@${f.owner_name}</span>`;
+    const favStar=f.is_owner?`<span class="fav-star${f.is_fav?' active':''}" onclick="toggleFav(event,'${f.name}')" title="收藏">★</span>`:'';
+    const visLabels={private:'🔒 私有',public:'🌐 公开',shared:'👥 共享'};
+    const visTag=f.is_owner?`<span class="vis-tag ${f.visibility}" onclick="cycleVisibility(event,'${f.name}','${f.visibility}')">${visLabels[f.visibility]}</span>`:`<span class="vis-tag ${f.visibility}" style="cursor:default">${visLabels[f.visibility]}</span>`;
+    const delBtn=f.is_owner?`<button class="btn-del" onclick="delFile('${f.rel}')">🗑</button>`:'';
+    const cb=batchMode?`<div class="cb-overlay"><input type="checkbox" onchange="toggleSelect('${f.rel}',this.checked)" ${selectedFiles.has(f.rel)?'checked':''}></div>`:'';
+    return `<div class="card${batchMode?' show-cb':''}${selectedFiles.has(f.rel)?' selected':''}" style="animation-delay:${i*0.03}s">
+      ${cb}<div class="preview">${getFileIcon(f)}</div>
+      <div class="info">
+        <div class="name" title="${f.original||f.name}">${f.original||f.name}${favStar}</div>
+        <div class="meta">${badge}${visTag}<span>${fmtSize(f.size)}</span><span>${new Date(f.mtime).toLocaleDateString('zh-CN')}</span></div>
+      </div>
+      <div class="actions"><button class="btn-copy" onclick="copyLink('${BASE+f.url}')">🔗</button><button class="btn-down" onclick="downloadFile('${f.rel}')">⬇</button>${delBtn}</div>
+    </div>`;
+  }).join('');
+}
+
+// Upload
+async function uploadFiles(files){
+  if(!files.length)return;
+  const folder=currentFolder||'';
+  for(const f of files){
+    const fd=new FormData();fd.append('file',f);if(folder)fd.append('folder',folder);
+    try{await fetch('/api/upload',{method:'POST',body:fd})}catch(e){}
+  }
+  loadFiles();loadFolders();refreshConsole();toast(`上传 ${files.length} 个文件`,'success');
+}
+
+// Delete
+async function delFile(rel){showConfirm('确定删除？',async()=>{await fetch('/api/files/'+rel,{method:'DELETE'});loadFiles();loadFolders();refreshConsole();toast('已移至回收站','info')})}
+
+// Batch
+function toggleBatchMode(){batchMode=!batchMode;selectedFiles.clear();document.getElementById('batchBar').classList.toggle('show',batchMode);document.getElementById('batchToggle').classList.toggle('active',batchMode);document.getElementById('batchToggle').textContent=batchMode?'✕ 取消':'☑️ 多选';updateBatchCount();renderFiles()}
+function toggleSelect(rel,checked){checked?selectedFiles.add(rel):selectedFiles.delete(rel);updateBatchCount();renderFiles()}
+function updateBatchCount(){document.getElementById('batchCount').textContent=`已选 ${selectedFiles.size} 项`}
+async function batchDelete(){
+  if(!selectedFiles.size)return;
+  showConfirm(`确定删除 ${selectedFiles.size} 个文件？`,async()=>{
+    for(const rel of selectedFiles)await fetch('/api/files/'+rel,{method:'DELETE'});
+    toggleBatchMode();loadFiles();loadFolders();refreshConsole();toast('已移至回收站','info');
+  });
+}
+async function batchMove(){
+  if(!selectedFiles.size)return;
+  const target=prompt('移动到的文件夹名称（留空=根目录）：');
+  if(target===null)return;
+  await fetch('/api/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({files:[...selectedFiles],folder:target})});
+  toggleBatchMode();loadFiles();loadFolders();toast('已移动','success');
+}
+function batchDownload(){for(const rel of selectedFiles)window.open(BASE+'/uploads/'+rel,'_blank')}
+
+// Favorites
+async function toggleFav(event,name){event.stopPropagation();const r=await fetch('/api/files/'+name+'/fav',{method:'POST'});const d=await r.json();toast(d.is_fav?'已收藏':'已取消','info');loadFiles()}
+
+// Visibility
+async function cycleVisibility(event,name,cur){
+  event.stopPropagation();
+  const existing=document.querySelector('.vis-popup');if(existing){existing.remove();return}
+  const popup=document.createElement('div');popup.className='vis-popup';
+  popup.innerHTML=`<div class="vis-option" onclick="setVis('${name}','private')"><span>🔒</span><div><strong>私有</strong><small>仅自己可见</small></div>${cur==='private'?' ✓':''}</div><div class="vis-option" onclick="setVis('${name}','public')"><span>🌐</span><div><strong>公开</strong><small>所有人可见</small></div>${cur==='public'?' ✓':''}</div><div class="vis-option" onclick="setVis('${name}','shared')"><span>👥</span><div><strong>共享</strong><small>指定用户可见</small></div>${cur==='shared'?' ✓':''}</div>`;
+  const rect=event.target.getBoundingClientRect();
+  popup.style.top=(rect.bottom+4)+'px';popup.style.left=rect.left+'px';
+  document.body.appendChild(popup);
+  setTimeout(()=>document.addEventListener('click',()=>{popup.remove()},{once:true}),100);
+}
+async function setVis(name,vis){
+  await fetch('/api/files/'+name+'/visibility',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({visibility:vis})});
+  document.querySelector('.vis-popup')?.remove();
+  toast({private:'🔒 已设为私有',public:'🌐 已设为公开',shared:'👥 已设为共享'}[vis],'success');
+  loadFiles();
+}
+
+// Share dialog
+async function showShareDialog(event,name){
+  event.stopPropagation();closeVisPopup();
+  let sharedIds=[];
+  try{const r=await fetch('/api/files/'+name+'/shares');const d=await r.json();sharedIds=(d.shares||[]).map(s=>s.id)}catch(e){}
+  let html=`<div class="share-dialog"><h3>👥 选择共享用户</h3>`;
+  (allUsers||[]).forEach(u=>{html+=`<div class="user-row"><input type="checkbox" value="${u.id}" id="su_${u.id}" ${sharedIds.includes(u.id)?'checked':''}><label for="su_${u.id}">${u.username}</label></div>`});
+  html+=`<div class="expire-row">有效期: <select id="shareExpire"><option value="7">7天</option><option value="30">30天</option><option value="90">90天</option><option value="365">1年</option><option value="0">永久</option></select></div><div class="btn-row"><button class="btn-cancel" onclick="closeShareDialog()">取消</button><button class="btn-save" onclick="saveShare('${name}')">保存</button></div></div>`;
+  const overlay=document.createElement('div');overlay.id='shareOverlay';overlay.style.cssText='position:fixed;inset:0;z-index:250;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML=`<div style="background:var(--bg-elevated);border:1px solid var(--glass-border);border-radius:var(--radius-xl);padding:24px;max-width:400px;width:90vw;box-shadow:var(--glass-shadow)">${html}</div>`;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeShareDialog()});
+  document.body.appendChild(overlay);
+}
+function closeShareDialog(){const o=document.getElementById('shareOverlay');if(o)o.remove()}
+function closeVisPopup(){const p=document.querySelector('.vis-popup');if(p)p.remove()}
+async function saveShare(name){
+  const checks=document.querySelectorAll('#shareOverlay input[type=checkbox]:checked');
+  const ids=Array.from(checks).map(c=>parseInt(c.value));
+  await fetch('/api/files/'+name+'/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_ids:ids})});
+  closeShareDialog();toast('共享设置已保存','success');
+}
+
+// Console
+async function refreshConsole(){
+  try{const r=await fetch('/api/stats');const d=await r.json();document.getElementById('consoleStorage').textContent=fmtSize(d.storage_bytes||0);document.getElementById('consoleTrash').textContent=(d.trash_count||0)+' 项'}catch(e){}
+}
+
+// ---- Duplicate Detection ----
+async function showDuplicates(){
+  isDupView=true;isTrashView=false;
+  document.getElementById('dropZone').style.display='none';document.getElementById('fileToolbar').style.display='none';
+  document.getElementById('fileGrid').style.display='none';document.getElementById('batchBar').classList.remove('show');
+  batchMode=false;selectedFiles.clear();
+  document.getElementById('dupToolbar').style.display='flex';
+  document.getElementById('dupGrid').style.display='grid';
+  document.getElementById('trashToolbar').classList.remove('show');document.getElementById('trashGrid').style.display='none';
+  document.getElementById('batchToggle').classList.remove('visible');
+  document.getElementById('consoleBar').style.display='none';
+  bc.innerHTML='<span>🔍 重复文件</span>';
+  document.querySelectorAll('.sidebar-folders .folder').forEach(el=>el.classList.remove('active'));
+  const dupEl=document.querySelector('[data-folder="__dup__"]');if(dupEl)dupEl.classList.add('active');
+  document.querySelector('.sidebar').classList.remove('open');
+  await loadDuplicates();
+}
+async function loadDuplicates(){
+  try{const r=await fetch('/api/duplicates');const d=await r.json();dupGroups=d.duplicates||[];renderDuplicates()}catch(e){}
+}
+function renderDuplicates(){
+  const g=document.getElementById('dupGrid');
+  if(!dupGroups.length){g.innerHTML='<div class="empty"><div class="icon">✅</div><h3>没有重复文件</h3><p>所有文件都是唯一的</p></div>';return}
+  g.innerHTML=dupGroups.map(grp=>{
+    const size=fmtSize(grp.size);let items='';
+    grp.files.forEach((f,i)=>{items+=`<div class="dup-item">${i===0?'<span class="keep">保留</span>':''} ${f.original} <span style="font-size:10px;color:var(--text-tertiary)">${f.name}</span></div>`});
+    return `<div class="dup-group"><div class="hash">MD5: ${grp.hash}</div><div class="size">📦 ${size} × ${grp.files.length} 重复 → 浪费 ${fmtSize(grp.size*(grp.files.length-1))}</div>${items}</div>`;
+  }).join('');
+}
+function exitDupView(){
+  isDupView=false;
+  document.getElementById('dropZone').style.display='';document.getElementById('fileToolbar').style.display='';
+  document.getElementById('fileGrid').style.display='';document.getElementById('consoleBar').style.display='';
+  document.getElementById('dupToolbar').style.display='none';document.getElementById('dupGrid').style.display='none';
+  dupGroups=[];selectFolder('');
+}
+async function batchDeleteDuplicates(){
+  let total=0;dupGroups.forEach(g=>total+=g.files.length-1);
+  if(!total){toast('没有可清理的重复文件','info');return}
+  showConfirm(`确定删除全部 ${total} 个重复文件（每组保留第一个）？`,async()=>{
+    for(const g of dupGroups){for(let i=1;i<g.files.length;i++)await fetch('/api/files/'+g.files[i].name,{method:'DELETE'})}
+    toast(`已清理 ${total} 个重复文件`,'success');loadDuplicates();loadFiles();loadFolders();refreshConsole();
+  });
+}
+
+// ---- Trash ----
+async function showTrash(){
+  isTrashView=true;isDupView=false;
+  document.getElementById('dropZone').style.display='none';document.getElementById('fileToolbar').style.display='none';
+  document.getElementById('fileGrid').style.display='none';document.getElementById('batchBar').classList.remove('show');
+  batchMode=false;selectedFiles.clear();
+  document.getElementById('trashToolbar').classList.add('show');document.getElementById('trashGrid').style.display='grid';
+  document.getElementById('dupToolbar').style.display='none';document.getElementById('dupGrid').style.display='none';
+  document.getElementById('batchToggle').classList.remove('visible');
+  document.getElementById('consoleBar').style.display='none';
+  bc.innerHTML='<span>🗑️ 回收站</span>';
+  document.querySelectorAll('.sidebar-folders .folder').forEach(el=>el.classList.remove('active'));
+  const trashEl=document.querySelector('[data-folder="__trash__"]');if(trashEl)trashEl.classList.add('active');
+  document.querySelector('.sidebar').classList.remove('open');
+  await loadTrash();
+}
+async function loadTrash(){try{const r=await fetch('/api/trash');const d=await r.json();trashItems=d.items;renderTrash()}catch(e){}}
+function exitTrashView(){
+  isTrashView=false;
+  document.getElementById('dropZone').style.display='';document.getElementById('fileToolbar').style.display='';
+  document.getElementById('fileGrid').style.display='';document.getElementById('consoleBar').style.display='';
+  document.getElementById('trashToolbar').classList.remove('show');document.getElementById('trashGrid').style.display='none';
+  trashBatchMode=false;trashSelected.clear();selectFolder('');
+}
+function getTrashIcon(item){
+  const mime=item.mime_type||'';
+  if(mime.startsWith('image/'))return '🖼️';if(mime.startsWith('video/'))return '🎬';
+  const ext=(item.original_name||'').split('.').pop().toLowerCase();
+  const icons={pdf:'📕',doc:'📘',docx:'📘',zip:'📦',rar:'📦',mp3:'🎵',txt:'📄'};
+  return icons[ext]||'📄';
+}
+function renderTrash(){
+  const gridEl=document.getElementById('trashGrid'),info=document.getElementById('trashInfo');
+  if(!trashItems.length){gridEl.innerHTML='<div class="empty"><div class="icon">📭</div><h3>回收站是空的</h3></div>';info.textContent='回收站 · 空';return}
+  info.textContent=`回收站 · ${trashItems.length} 项`;
+  gridEl.innerHTML=trashItems.map(item=>{
+    const d=new Date(item.deleted_at),dateStr=d.toLocaleDateString('zh-CN'),rd=item.remaining_days;
+    let badge='',badgeCls='';
+    if(rd<=1){badge='⚠️ 即将清理';badgeCls='danger'}else if(rd<=7){badge=`⏳ ${rd}天后清理`;badgeCls='warn'}else{badge=`📅 ${rd}天后到期`;badgeCls='ok'}
+    return `<div class="trash-card${trashSelected.has(item.id)?' selected':''}">
+      <div class="icon-big">${getTrashIcon(item)}</div>
+      <div class="info">
+        <div class="name">${item.original_name}</div>
+        <div class="meta"><span>${fmtSize(item.size)}</span><span>·</span><span>${dateStr}</span><span class="expire-badge ${badgeCls}">${badge}</span></div>
+      </div>
+      <div class="actions">
+        <button class="btn-restore" onclick="restoreTrash(${item.id})">↩ 恢复</button>
+        <button class="btn-purge" onclick="permDelete(${item.id})">永久删除</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleTrashBatch(){trashBatchMode=!trashBatchMode;trashSelected.clear();renderTrash()}
+async function restoreTrash(id){await fetch('/api/trash/'+id+'/restore',{method:'POST'});loadTrash();loadFiles();loadFolders();toast('已恢复','success')}
+async function permDelete(id){showConfirm('永久删除？不可恢复！',async()=>{await fetch('/api/trash/'+id,{method:'DELETE'});loadTrash();refreshConsole();toast('已永久删除','info')})}
+async function emptyTrash(){showConfirm('清空全部回收站？',async()=>{await fetch('/api/trash/empty',{method:'POST'});loadTrash();refreshConsole();toast('已清空','info')})}
+async function batchRestoreTrash(){let ids=[...trashSelected];if(!ids.length){toast('请先在回收站中勾选文件','error');return};for(const id of ids)await fetch('/api/trash/'+id+'/restore',{method:'POST'});loadTrash();toast('已批量恢复','success')}
+
+// ---- AI Classify ----
+async function classifyBatch(){
+  const files=allFiles.filter(f=>f.is_owner&&(f.is_image||f.is_video)&&!f.ai_category);
+  if(!files.length){toast('没有待分类的媒体文件','info');return}
+  toast(`开始 AI 分类 ${files.length} 个文件...`,'info');
+  await fetch('/api/classify-batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({names:files.map(f=>f.name)})});
+  setTimeout(()=>{loadFiles();loadFolders()},3000);
+}
+
+// ---- PDF Preview ----
+async function previewPDF(rel){
+  const m=document.getElementById('previewModal'),c=document.getElementById('previewContent');
+  m.style.display='flex';c.className='modal';c.style.maxWidth='95vw';c.style.width='800px';
+  c.innerHTML='<div style="text-align:center;padding:40px">⏳ 加载中...</div>';
+  try{
+    const r=await fetch('/api/read/'+rel);const d=await r.json();
+    if(d.error){c.innerHTML=`<div class="text-preview"><p>${d.error}</p></div>`;return}
+    // Render PDF using iframe approach
+    c.innerHTML=`<div class="text-preview"><div class="text-header">📕 PDF 预览: ${rel.split('/').pop()}<span class="spacer"></span><button class="text-action" onclick="closePreview()">✕</button></div><iframe src="${BASE}/uploads/${rel}" style="width:100%;height:70vh;border:none;border-radius:8px"></iframe></div>`;
+  }catch(e){c.innerHTML='<div class="text-preview"><p>预览失败</p></div>'}
+}
+
+// ---- Text Preview ----
+async function previewText(rel,ext){
+  const m=document.getElementById('previewModal'),c=document.getElementById('previewContent');
+  m.style.display='flex';c.className='modal';c.style.maxWidth='800px';c.style.width='90vw';
+  try{
+    const r=await fetch('/api/read/'+rel);const d=await r.json();
+    c.innerHTML=`<div class="text-preview"><div class="text-header">📄 ${rel.split('/').pop()}<span class="spacer"></span><button class="text-action" onclick="closePreview()">✕</button></div><pre>${d.content||''}</pre></div>`;
+  }catch(e){c.innerHTML='<div class="text-preview"><p>加载失败</p></div>'}
+}
+
+// ---- Public Folders ----
+async function loadPublicFolders(){
+  try{
+    const r=await fetch('/api/public-folders');const d=await r.json();
+    if(!d.folders||!d.folders.length)return;
+    const list=document.getElementById('folderList');
+    list.innerHTML+='<div class="sidebar-divider">📢 公开分享</div>';
+    for(const f of d.folders){
+      const isActive=currentFolder==='public'&&currentPublicOwner===f.owner_id;
+      list.innerHTML+=`<div class="folder${isActive?' active':''}" onclick="selectPublicFolder('public',${f.owner_id})" data-folder="public_${f.owner_id}"><span class="icon">🌐</span><span class="label">${f.owner_name} 的分享</span><span class="count">${f.count}</span></div>`;
+    }
+  }catch(e){}
+}
+
+// ---- Toolbox ----
+const TOOLS=[
+  {id:'pdf_merge',icon:'📑',name:'PDF 合并',desc:'多个PDF合并为一个',api:'/api/tools/pdf/merge',need:'files',accept:'.pdf',hint:'勾选2个以上PDF文件'},
+  {id:'pdf_split',icon:'✂️',name:'PDF 拆分',desc:'按页拆分PDF',api:'/api/tools/pdf/split',need:'file',accept:'.pdf',hint:'选择PDF + 输入页码如 1-3,5'},
+  {id:'pdf_compress',icon:'🗜️',name:'PDF 压缩',desc:'减小PDF文件体积',api:'/api/tools/pdf/compress',need:'file',accept:'.pdf',hint:'选择一个PDF文件'},
+  {id:'img_compress',icon:'🖼️',name:'图片压缩',desc:'压缩图片大小',api:'/api/tools/image/compress',need:'file',accept:'.jpg,.jpeg,.png,.webp',hint:'选择图片，默认质量70%'},
+  {id:'img_resize',icon:'📐',name:'图片缩放',desc:'调整图片尺寸',api:'/api/tools/image/resize',need:'file',accept:'.jpg,.jpeg,.png,.webp',hint:'指定宽度或高度'},
+  {id:'img_convert',icon:'🔄',name:'格式转换',desc:'图片格式互转',api:'/api/tools/image/convert',need:'file',accept:'.jpg,.jpeg,.png,.webp',hint:'选图片+目标格式'},
+  {id:'zip_pack',icon:'📦',name:'打包ZIP',desc:'多文件打包压缩',api:'/api/tools/zip/compress',need:'files',accept:'*',hint:'勾选要打包的文件'},
+  {id:'zip_extract',icon:'📤',name:'解压ZIP',desc:'解压缩文件',api:'/api/tools/zip/extract',need:'file',accept:'.zip',hint:'选择一个ZIP文件'},
+  {id:'ocr',icon:'🔍',name:'OCR识别',desc:'图片文字提取',api:'/api/tools/ocr',need:'file',accept:'.jpg,.jpeg,.png',hint:'选择含文字的图片'},
+  {id:'img2pdf',icon:'📸',name:'图转PDF',desc:'多图合并为PDF',api:'/api/tools/convert/images-to-pdf',need:'files',accept:'.jpg,.jpeg,.png',hint:'勾选要合并的图片'},
+];
+
+function showToolbox(){
+  const m=document.getElementById('previewModal'),c=document.getElementById('previewContent');
+  m.style.display='flex';c.className='modal';c.style.maxWidth='780px';c.style.width='90vw';
+  let html=`<div class="text-preview"><div class="text-header">🔧 工具箱<span class="spacer"></span><button class="text-action" onclick="closePreview()">✕</button></div>`;
+  html+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:8px 0">`;
+  TOOLS.forEach(t=>{
+    html+=`<div style="background:var(--bg-glass);border:1px solid var(--glass-border);border-radius:var(--radius-md);padding:16px;cursor:pointer;transition:all .15s"
+      onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg-glass-hover)'"
+      onmouseout="this.style.borderColor='var(--glass-border)';this.style.background='var(--bg-glass)'"
+      onclick="startTool('${t.id}')">
+      <div style="font-size:32px;margin-bottom:8px">${t.icon}</div>
+      <div style="font-weight:600;font-size:14px;color:var(--text-primary);margin-bottom:4px">${t.name}</div>
+      <div style="font-size:11px;color:var(--text-tertiary)">${t.desc}</div>
+    </div>`;
+  });
+  html+='</div></div>';c.innerHTML=html;
+}
+
+function startTool(id){
+  const t=TOOLS.find(x=>x.id===id);if(!t)return;closePreview();
+  const m=document.getElementById('previewModal'),c=document.getElementById('previewContent');
+  m.style.display='flex';c.className='modal';c.style.maxWidth='520px';c.style.width='90vw';
+  if(t.need==='files'){
+    selectFolder('');toggleBatchMode();toast(`📌 勾选文件后回来点「${t.name}」`,'info');
+    const bar=document.getElementById('batchBar');
+    bar.innerHTML=`<span class="count" id="batchCount">已选 0 项</span><span class="spacer"></span><button style="background:var(--sage);color:#fff;border:none;border-radius:6px;padding:5px 14px;cursor:pointer;font-weight:600" onclick="execTool('${t.id}')">${t.icon} ${t.name}</button><button onclick="toggleBatchMode()">✕ 取消</button>`;
+    bar.style.background='var(--accent)';bar.classList.add('show');window._toolBatchMode=t.id;
+  }else{
+    c.innerHTML=`<div class="text-preview">
+      <div class="text-header">${t.icon} ${t.name}<span class="spacer"></span><button class="text-action" onclick="closePreview()">✕</button></div>
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px">${t.hint}</p>
+      <input type="file" id="toolFileInput" accept="${t.accept}" style="margin-bottom:12px;color:var(--text-primary)" onchange="document.getElementById('toolFileName').textContent=this.files[0]?.name||''">
+      <span id="toolFileName" style="font-size:12px;color:var(--text-tertiary);display:block;margin-bottom:12px"></span>
+      <div id="toolExtra"></div>
+      <button class="text-action" style="background:var(--accent);color:#fff;border:none;padding:8px 20px;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px" onclick="execToolSingle('${t.id}')">${t.icon} 开始</button></div>`;
+    if(id==='img_compress')setTimeout(()=>{document.getElementById('toolExtra').innerHTML='质量: <input type="range" id="toolQuality" min="10" max="100" value="70" style="width:120px"> <span id="qVal">70</span>%<br><span style="font-size:11px;color:var(--text-tertiary)">最大宽度: <input type="number" id="toolMaxW" value="0" style="width:70px;background:var(--bg-surface);border:1px solid var(--glass-border);color:var(--text-primary);border-radius:4px;padding:2px 6px"> px (0=不限)</span>';document.getElementById('toolQuality').oninput=function(){document.getElementById('qVal').textContent=this.value}},100);
+    if(id==='img_resize')setTimeout(()=>{document.getElementById('toolExtra').innerHTML='宽度: <input type="number" id="toolWidth" value="800" style="width:70px;background:var(--bg-surface);border:1px solid var(--glass-border);color:var(--text-primary);border-radius:4px;padding:2px 6px"> px<br>高度: <input type="number" id="toolHeight" value="0" style="width:70px;background:var(--bg-surface);border:1px solid var(--glass-border);color:var(--text-primary);border-radius:4px;padding:2px 6px"> px (0=自动)'},100);
+    if(id==='img_convert')setTimeout(()=>{document.getElementById('toolExtra').innerHTML='目标格式: <select id="toolFormat" style="background:var(--bg-surface);border:1px solid var(--glass-border);color:var(--text-primary);border-radius:4px;padding:2px 6px"><option value="jpeg">JPEG</option><option value="png">PNG</option><option value="webp">WebP</option></select>'},100);
+    if(id==='pdf_split')setTimeout(()=>{document.getElementById('toolExtra').innerHTML='页码范围: <input type="text" id="toolPages" placeholder="如 1-3,5" style="width:140px;background:var(--bg-surface);border:1px solid var(--glass-border);color:var(--text-primary);border-radius:4px;padding:4px 8px"> <span style="font-size:11px;color:var(--text-tertiary)">留空=全部</span>'},100);
+  }
+}
+
+async function execTool(id){
+  const t=TOOLS.find(x=>x.id===id);const files=[...selectedFiles];
+  if(!files.length){toast('请先勾选文件','error');return}
+  const fd=new FormData();files.forEach(f=>fd.append('files',f));
+  try{
+    const r=await fetch(t.api,{method:'POST',body:fd});const d=await r.json();
+    if(d.error){toast(d.error,'error')}else{toast('完成！','success');toggleBatchMode()}
+  }catch(e){toast('执行失败','error')}
+}
+
+async function execToolSingle(id){
+  const t=TOOLS.find(x=>x.id===id);const input=document.getElementById('toolFileInput');
+  if(!input.files.length){toast('请选择文件','error');return}
+  const fd=new FormData();fd.append('file',input.files[0]);
+  if(id==='img_compress'){fd.append('quality',document.getElementById('toolQuality')?.value||'70');fd.append('max_width',document.getElementById('toolMaxW')?.value||'0')}
+  if(id==='img_resize'){fd.append('width',document.getElementById('toolWidth')?.value||'800');fd.append('height',document.getElementById('toolHeight')?.value||'0')}
+  if(id==='img_convert')fd.append('format',document.getElementById('toolFormat')?.value||'jpeg')
+  if(id==='pdf_split')fd.append('pages',document.getElementById('toolPages')?.value||'')
+  try{
+    const r=await fetch(t.api,{method:'POST',body:fd});const d=await r.json();
+    if(d.error){toast(d.error,'error')}else{toast('完成！','success');closePreview()}
+  }catch(e){toast('执行失败','error')}
+}
+</script>
+</body>
+</html>
